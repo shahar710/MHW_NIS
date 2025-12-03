@@ -36,7 +36,7 @@ data_models$time_series_id %>% n_distinct(
 ```
 
 #1) Modeling
-##GLMM
+##1.1) GLMM
 ```{r}
 test_main=glmmTMB(
   data = data_models,
@@ -80,21 +80,27 @@ performance::check_collinearity(test_main)
 plot(DHARMa::simulateResiduals(test_main))
 MuMIn::r.squaredGLMM(test_main)
 #Summarise table for the model
-fixed_effects_df <- broom.mixed::tidy(test_main, effects = "fixed") %>%
+fixed_effects_df <- broom.mixed::tidy(test_main, effects = "fixed",
+                                      conf.level = 0.95,
+                                      conf.int=T) %>%
   # Select and rename columns to match the request
   select(
     Variable = term,
     Coefficient = estimate,
     `Std. Error` = std.error,
     `Z Value` = statistic,
-    `P Value` = p.value
+    `P Value` = p.value,
+    `CI lower` = conf.low,
+    `CI upper`=conf.high
   ) %>%
   # Format numeric columns for clean presentation (e.g., 3 decimal places)
   mutate(
     Coefficient = round(Coefficient, 3),
     `Std. Error` = round(`Std. Error`, 3),
-    `Z Value` = round(`Z Value`, 2),
-    `P Value` = format.pval(`P Value`, digits = 3, eps = 0.0001)
+    `Z Value` = round(`Z Value`, 3),
+    `P Value` = format.pval(`P Value`, digits = 3, eps = 0.0001),
+    `CI lower` = round(`CI lower`,3),
+    `CI upper`=round(`CI upper`,3)
   )
 #random effects
 random_effects_df <- broom.mixed::tidy(test_main, effects = "ran_pars") 
@@ -104,6 +110,90 @@ random_effects_df <- broom.mixed::tidy(test_main, effects = "ran_pars")
 #Binomial model: AIC = 7687.6
 #Betabinomial model: AIC = 7689.6
 #Delta is 2 - models are quite similar - I am chossing base on r^2
+```
+
+##1.2) R2 partition
+```{r}
+####################
+#Variance partition#
+#####################
+#Run Hierarchical Variance Partitioning using glmm.hp
+## The glmm.hp function calculates the Marginal R2 (R2m) and then decomposes
+## it into the individual contribution of each fixed effect predictor using
+## hierarchical partitioning (average shared variance method).
+#model
+test_main_r_part=glmmTMB(
+  data = data_models_pre_scaled,
+  formula = records~
+    first_rec_year_sc+
+    CPI_sc+
+    sources_sc+
+    annual_c_int_sc+
+    year_of_mhws_sc+
+    median_sst_sc+
+    long_max_s_sst_sc+
+    (1|h3_id)+
+    (1|species),
+  family = "binomial")
+
+R2_partition_results <-glmm.hp(test_main_r_part,
+                                #iv =iv,
+                                type="R2") # Specify that I want adjusted R2 partitioning
+
+R2_partition_results
+#write_rds(R2_partition_results,"R2_partition_results_test_main.rds")
+
+#Interpretation
+##Unique - The R2 explained by the predictor alone, i.e., in a model containing only that predictor.
+
+##Average.share - The R2 explained by the predictor jointly with other predictors, calculated as the average improvement in R2 across all possible models where that predictor is added. This is the primary metric for individual predictor importance.
+
+##Individual - The total contribution of the predictor to the model Rm. This is the sum of its Unique contribution and its Average.share contribution: Unique+Average.share.
+
+##I.perc(%)	- The percentage contribution of the predictor to the total Rm. Calculated as:
+#Individual/Rm2 ×100%.
+
+
+############UPDATE
+#Save as csv
+R2_partition_results_df=R2_partition_results[[2]] %>% 
+  as_data_frame() %>% 
+  rownames_to_column() %>% 
+  rename(predictors=1,
+         Unique =2,
+         Average.share=3,
+         Individual=4,
+         `I.perc(%)`=5) %>% 
+  mutate(predictors=case_when(predictors%in%"1"~"Year of first record",
+                              predictors%in%"2"~"CPI",
+                              predictors%in%"3"~"Sources",
+                              predictors%in%"4"~"Cumulative intensity",
+                              predictors%in%"5"~"Year",
+                              predictors%in%"6"~"SST - spatiotemporal",
+                              predictors%in%"7"~"SST - spatial")) %>% 
+  # 👇 ADD THIS PART TO SUM DOWN THE COLUMNS AND ADD A NEW ROW
+  bind_rows(
+    summarise(., 
+      predictors = "", # Set the predictor name to an empty string (" ")
+      across(
+        .cols = c(Unique, Average.share, Individual, `I.perc(%)`), # Specify the columns to sum
+        .fns = ~sum(., na.rm = TRUE) # Apply the sum function
+      )
+    )
+  )
+  
+#write.csv(R2_partition_results_df,"R2_partition_results_df_test_main.csv",row.names = F)
+
+R2_partition_results_df=read.csv("glmms/test_main/R2_partition_results_df_test_main.csv") %>% 
+  rename(Variable_p=predictors) %>% 
+  mutate(Variable_p=case_when(
+    Variable_p%in%"Year of first record"~"Year of first record",
+    Variable_p%in%"CPI"~"CPI",
+    Variable_p%in%"Sources"~"Effort",
+    Variable_p%in%"Cumulative intensity"~"MHWs",
+    Variable_p%in%"Year"~"Year",
+    Variable_p%in%"SST - spatiotemporal"~"SST (annual)",
+    Variable_p%in%"SST - spatial"~"SST (climate)"))
 ```
 
 Extract predictions
@@ -140,23 +230,75 @@ test_main_gg_yfr=ggeffects::ggpredict(
   test_main,
   terms=c("first_rec_year [1902:2018 by = 1]"))
 
-write_rds(test_main_gg_cint,
-          "test_main_gg_cint.rds")
-write_rds(test_main_gg_yr,
-          "test_main_gg_yr.rds")
-write_rds(test_main_gg_sst,
-          "test_main_gg_sst.rds")
-write_rds(test_main_gg_source,
-          "test_main_gg_source.rds")
-write_rds(test_main_gg_cpi,
-          "test_main_gg_cpi.rds")
-write_rds(test_main_gg_yfr,
-          "test_main_gg_yfr.rds")
-write_rds(test_main_gg_s_sst,
-          "test_main_gg_s_sst.rds")
+#write_rds(test_main_gg_cint,
+       #   "test_main_gg_cint.rds")
+#write_rds(test_main_gg_yr,
+       #   "test_main_gg_yr.rds")
+#write_rds(test_main_gg_sst,
+        #  "test_main_gg_sst.rds")
+#write_rds(test_main_gg_source,
+         # "test_main_gg_source.rds")
+#write_rds(test_main_gg_cpi,
+         # "test_main_gg_cpi.rds")
+#write_rds(test_main_gg_yfr,
+         # "test_main_gg_yfr.rds")
+#write_rds(test_main_gg_s_sst,
+         # "test_main_gg_s_sst.rds")
 ```
 
 ####Plot model
+#####coef
+```{r}
+fixed_effects_df_vis=fixed_effects_df %>%  
+         filter(!Variable%in%"(Intercept)") %>% 
+  mutate(Effect=case_when(`CI lower`>0~"Positive",
+                          `CI upper`<0~"Negative",
+                          TRUE~"Neutral"),
+         Variable_p=case_when(
+                    Variable%in%"scale(first_rec_year)"~"Year of first record",
+                    Variable%in%"scale(CPI)"~"CPI",
+                    Variable%in%"scale(sources)"~"Effort",
+                    Variable%in%"scale(annual_c_int)"~"MHWs",
+                    Variable%in%"scale(year_of_mhws)"~"Year",
+                    Variable%in%"scale(median_sst)"~"SST (annual)",
+                    Variable%in%"scale(long_max_s_sst)"~"SST (climate)"))
+
+coef_p=ggplot(data=fixed_effects_df_vis)+
+  geom_vline(xintercept = 0,linetype="dashed",color="black")+
+  geom_errorbarh(aes(xmin=`CI lower`,
+                     xmax=`CI upper`,
+                     y=Variable_p),
+                 height=0.1,
+                 color="grey",
+                 size=1)+
+  geom_point(aes(x=Coefficient,
+                 y=reorder(Variable_p,Coefficient),
+                 fill=Effect),
+             shape=21,
+             size=3.5)+
+  scale_fill_manual(values = c("Positive" = "darkgreen", 
+                               "Negative" = "darkred", 
+                               "Neutral" = "white"))+
+  geom_text(data=R2_partition_results_df %>% 
+              drop_na(),
+            aes(y=reorder(Variable_p,`I.perc...`),
+                x=-0.8,
+                label=paste(`I.perc...`,"%",sep ="")))+
+  theme_bw()+
+  theme(#panel.background = element_rect(fill = "white"),
+        legend.position=c(0.85, 0.175),
+        legend.background = element_blank(),
+        legend.key.size = unit(0.5, 'cm'))+
+  scale_x_continuous(breaks = seq(-5,5,by=.5))+
+  labs(x="Coefficient",
+       y="Predictor",
+       caption = bquote(R[m]^2 == 0.48*","~~R[c]^2 == 0.53))+
+  coord_cartesian(xlim=c(-0.9,1.7))
+coef_p
+ggsave(filename ="./plots/coef_p.png" ,plot =coef_p ,device = "jpeg",units = "cm",width = 15,height = 12)
+```
+
+#####Predicted
 ```{r}
 #c_intensity
 test_main_cint_p=ggplot(data_models)+
@@ -379,80 +521,6 @@ test_main_grid_nc=gridExtra::grid.arrange(
 ggsave(filename ="test_main_grid_nc.png" ,plot =test_main_grid_nc ,device = "jpeg",units = "cm",width = 15,height = 20)
 ```
 
-#2) R2 partition
-```{r}
-####################
-#Variance partition#
-#####################
-#Run Hierarchical Variance Partitioning using glmm.hp
-## The glmm.hp function calculates the Marginal R2 (R2m) and then decomposes
-## it into the individual contribution of each fixed effect predictor using
-## hierarchical partitioning (average shared variance method).
-#model
-test_main_r_part=glmmTMB(
-  data = data_models_pre_scaled,
-  formula = records~
-    first_rec_year_sc+
-    CPI_sc+
-    sources_sc+
-    annual_c_int_sc+
-    year_of_mhws_sc+
-    median_sst_sc+
-    long_max_s_sst_sc+
-    (1|h3_id)+
-    (1|species),
-  family = "binomial")
-
-R2_partition_results <-glmm.hp(test_main_r_part,
-                                #iv =iv,
-                                type="R2") # Specify that I want adjusted R2 partitioning
-
-R2_partition_results
-write_rds(R2_partition_results,"R2_partition_results_test_main.rds")
-
-#Interpretation
-##Unique - The R2 explained by the predictor alone, i.e., in a model containing only that predictor.
-
-##Average.share - The R2 explained by the predictor jointly with other predictors, calculated as the average improvement in R2 across all possible models where that predictor is added. This is the primary metric for individual predictor importance.
-
-##Individual - The total contribution of the predictor to the model Rm. This is the sum of its Unique contribution and its Average.share contribution: Unique+Average.share.
-
-##I.perc(%)	- The percentage contribution of the predictor to the total Rm. Calculated as:
-#Individual/Rm2 ×100%.
-
-
-############UPDATE
-#Save as csv
-R2_partition_results_df=R2_partition_results[[2]] %>% 
-  as_data_frame() %>% 
-  rownames_to_column() %>% 
-  rename(predictors=1,
-         Unique =2,
-         Average.share=3,
-         Individual=4,
-         `I.perc(%)`=5) %>% 
-  mutate(predictors=case_when(predictors%in%"1"~"Year of first record",
-                              predictors%in%"2"~"CPI",
-                              predictors%in%"3"~"Sources",
-                              predictors%in%"4"~"Cumulative intensity",
-                              predictors%in%"5"~"Year",
-                              predictors%in%"6"~"SST - spatiotemporal",
-                              predictors%in%"7"~"SST - spatial")) %>% 
-  # 👇 ADD THIS PART TO SUM DOWN THE COLUMNS AND ADD A NEW ROW
-  bind_rows(
-    summarise(., 
-      predictors = "", # Set the predictor name to an empty string (" ")
-      across(
-        .cols = c(Unique, Average.share, Individual, `I.perc(%)`), # Specify the columns to sum
-        .fns = ~sum(., na.rm = TRUE) # Apply the sum function
-      )
-    )
-  )
-  
-write.csv(R2_partition_results_df,"R2_partition_results_df_test_main.csv",row.names = F)
-```
-
-
 #3) Model selection
 Using dredge
 ```{r}
@@ -516,7 +584,7 @@ cleaned_table2 <- as.data.frame(cleaned_table) %>%
   relocate(Model) %>% 
   as_tibble()
 
-write.csv(cleaned_table2,"cleaned_table.csv",row.names = F)
+#write.csv(cleaned_table2,"cleaned_table.csv",row.names = F)
 
 
 importance_ranking <- MuMIn::sw(model_selection_table)
@@ -534,7 +602,7 @@ sw_df_long <- data.frame(
                              Predictor%in%"cond(scale(long_max_s_sst))"~"SST - spatial"),
          SW=SW %>% round(digits = 3))
 
-write.csv(sw_df_long,"sw_df_long.csv")
+#write.csv(sw_df_long,"sw_df_long.csv")
 # Reset global options
 options(na.action = "na.omit")
 ```
@@ -623,11 +691,6 @@ post_est_data=data_events_grouped %>%
 post_est_data$species %>% n_distinct()
 post_est_data$h3_id %>% n_distinct()
 post_est_data %>% nrow()
-
-post_est_species %>% 
-  group_by(time_series_id) %>% 
-  summarise(sum_r=sum(records)) %>% 
-  pull(sum_r) %>% range
 ```
 
 ##4.1) Only species with first records after 1987
@@ -658,21 +721,27 @@ plot(DHARMa::simulateResiduals(all_after_1987))
 MuMIn::r.squaredGLMM(all_after_1987)
 
 #Summarise table for the model
-fixed_effects_df_after_1987 <- broom.mixed::tidy(all_after_1987, effects = "fixed") %>%
+fixed_effects_df_after_1987 <- broom.mixed::tidy(all_after_1987, effects = "fixed",
+                                      conf.level = 0.95,
+                                      conf.int=T) %>%
   # Select and rename columns to match the request
   select(
     Variable = term,
     Coefficient = estimate,
     `Std. Error` = std.error,
     `Z Value` = statistic,
-    `P Value` = p.value
+    `P Value` = p.value,
+    `CI lower` = conf.low,
+    `CI upper`=conf.high
   ) %>%
   # Format numeric columns for clean presentation (e.g., 3 decimal places)
   mutate(
     Coefficient = round(Coefficient, 3),
     `Std. Error` = round(`Std. Error`, 3),
-    `Z Value` = round(`Z Value`, 2),
-    `P Value` = format.pval(`P Value`, digits = 3, eps = 0.0001)
+    `Z Value` = round(`Z Value`, 3),
+    `P Value` = format.pval(`P Value`, digits = 3, eps = 0.0001),
+    `CI lower` = round(`CI lower`,3),
+    `CI upper`=round(`CI upper`,3)
   )
 #random effects
 random_effects_df <- broom.mixed::tidy(all_after_1987, effects = "ran_pars") 
@@ -713,7 +782,7 @@ R2_partition_results_after_1987 <-glmm.hp(all_after_1987_sc,
                                 type="R2") # Specify that I want adjusted R2 partitioning
 
 R2_partition_results_after_1987
-write_rds(R2_partition_results_after_1987,"R2_partition_results_after_1987_test_main.rds")
+#write_rds(R2_partition_results_after_1987,"R2_partition_results_after_1987_test_main.rds")
 
 #Interpretation
 ##Unique - The R2 explained by the predictor alone, i.e., in a model containing only that predictor.
@@ -754,7 +823,9 @@ R2_partition_results_after_1987_df=R2_partition_results_after_1987[[2]] %>%
     )
   )
   
-write.csv(R2_partition_results_after_1987_df,"R2_partition_results_after_1987_df_test_main.csv",row.names = F)
+#write.csv(R2_partition_results_after_1987_df,"R2_partition_results_after_1987_df_test_main.csv",row.names = F)
+
+R2_partition_results_after_1987_df=read.csv("glmms/after_1987_all_together/R2_partition_results_after_1987_df_test_main.csv")
 ```
 
 ##4.2) Pre-establishment
@@ -840,7 +911,7 @@ R2_partition_results_pre_est_sc <-glmm.hp(pre_est_sc,
                                 type="R2") # Specify that I want adjusted R2 partitioning
 
 R2_partition_results_pre_est_sc
-write_rds(R2_partition_results_pre_est_sc,"R2_partition_results_pre_est_sc.rds")
+#write_rds(R2_partition_results_pre_est_sc,"R2_partition_results_pre_est_sc.rds")
 
 #Interpretation
 ##Unique - The R2 explained by the predictor alone, i.e., in a model containing only that predictor.
@@ -881,7 +952,7 @@ R2_partition_results_pre_est_sc_df=R2_partition_results_pre_est_sc[[2]] %>%
     )
   )
   
-write.csv(R2_partition_results_pre_est_sc_df,"R2_partition_results_pre_est_sc_df.csv",row.names = F)
+#write.csv(R2_partition_results_pre_est_sc_df,"R2_partition_results_pre_est_sc_df.csv",row.names = F)
 ```
 
 ###4.2.2) extract predicted
@@ -1021,7 +1092,7 @@ R2_partition_results_post_est_sc <-glmm.hp(post_est_sc,
                                 type="R2") # Specify that I want adjusted R2 partitioning
 
 R2_partition_results_post_est_sc
-write_rds(R2_partition_results_post_est_sc,"R2_partition_results_post_est_sc.rds")
+#write_rds(R2_partition_results_post_est_sc,"R2_partition_results_post_est_sc.rds")
 
 #Interpretation
 ##Unique - The R2 explained by the predictor alone, i.e., in a model containing only that predictor.
@@ -1062,7 +1133,7 @@ R2_partition_results_post_est_sc_df=R2_partition_results_post_est_sc[[2]] %>%
     )
   )
   
-write.csv(R2_partition_results_post_est_sc_df,"R2_partition_results_post_est_sc_df.csv",row.names = F)
+#write.csv(R2_partition_results_post_est_sc_df,"R2_partition_results_post_est_sc_df.csv",row.names = F)
 ```
 
 ###4.3.2) extract predicted
