@@ -79,6 +79,8 @@ performance::check_overdispersion(test_main)
 performance::check_collinearity(test_main)
 plot(DHARMa::simulateResiduals(test_main))
 MuMIn::r.squaredGLMM(test_main)
+performance::r2_nakagawa(test_main)
+
 #Summarise table for the model
 fixed_effects_df <- broom.mixed::tidy(test_main, effects = "fixed",
                                       conf.level = 0.95,
@@ -261,7 +263,8 @@ fixed_effects_df_vis=fixed_effects_df %>%
                     Variable%in%"scale(annual_c_int)"~"MHWs",
                     Variable%in%"scale(year_of_mhws)"~"Year",
                     Variable%in%"scale(median_sst)"~"SST (annual)",
-                    Variable%in%"scale(long_max_s_sst)"~"SST (climate)"))
+                    Variable%in%"scale(long_max_s_sst)"~"SST (climate)")) %>% 
+  left_join(R2_partition_results_df,by="Variable_p")
 
 coef_p=ggplot(data=fixed_effects_df_vis)+
   geom_vline(xintercept = 0,linetype="dashed",color="black")+
@@ -279,13 +282,15 @@ coef_p=ggplot(data=fixed_effects_df_vis)+
   scale_fill_manual(values = c("Positive" = "darkgreen", 
                                "Negative" = "darkred", 
                                "Neutral" = "white"))+
-  geom_text(data=R2_partition_results_df %>% 
+  geom_text(data=fixed_effects_df_vis %>% 
               drop_na(),
             aes(y=reorder(Variable_p,`I.perc...`),
-                x=-0.8,
-                label=paste(`I.perc...`,"%",sep ="")))+
+                x=Coefficient,
+                label=paste(`I.perc...`,"%",sep ="")),
+            size=3,
+            vjust=-1)+
   theme_bw()+
-  theme(#panel.background = element_rect(fill = "white"),
+  theme(panel.grid.minor = element_blank(),
         legend.position=c(0.85, 0.175),
         legend.background = element_blank(),
         legend.key.size = unit(0.5, 'cm'))+
@@ -293,7 +298,7 @@ coef_p=ggplot(data=fixed_effects_df_vis)+
   labs(x="Coefficient",
        y="Predictor",
        caption = bquote(R[m]^2 == 0.48*","~~R[c]^2 == 0.53))+
-  coord_cartesian(xlim=c(-0.9,1.7))
+  coord_cartesian(xlim=c(-1.7,1.7))
 coef_p
 ggsave(filename ="./plots/coef_p.png" ,plot =coef_p ,device = "jpeg",units = "cm",width = 15,height = 12)
 ```
@@ -842,10 +847,9 @@ pre_est_test=glmmTMB(
     scale(long_max_s_sst)+
     (1|h3_id)+
     (1|species),
-  family = "binomial",
-  control = glmmTMBControl(optimizer = optim,
-                           optArgs = list(method = "BFGS",
-                                          maxit = 10000)))
+  family = "binomial")
+#save model
+saveRDS(pre_est_test,"./glmms/post_establishment/pre_est_test.rds")
 
 summary(pre_est_test)
 performance::check_singularity(pre_est_test)
@@ -854,23 +858,29 @@ performance::check_overdispersion(pre_est_test)
 performance::check_collinearity(pre_est_test)
 plot(DHARMa::simulateResiduals(pre_est_test))
 MuMIn::r.squaredGLMM(pre_est_test)
-
+performance::r2_nakagawa(pre_est_test)
 #Summarise table for the model
-fixed_effects_df_pre_est_test <- broom.mixed::tidy(pre_est_test, effects = "fixed") %>%
+fixed_effects_df_pre_est_test <- broom.mixed::tidy(pre_est_test, effects = "fixed",
+                                                   conf.level = 0.95,
+                                      conf.int=T) %>%
   # Select and rename columns to match the request
   select(
     Variable = term,
     Coefficient = estimate,
     `Std. Error` = std.error,
     `Z Value` = statistic,
-    `P Value` = p.value
+    `P Value` = p.value,
+    `CI lower` = conf.low,
+    `CI upper`=conf.high
   ) %>%
   # Format numeric columns for clean presentation (e.g., 3 decimal places)
   mutate(
     Coefficient = round(Coefficient, 3),
     `Std. Error` = round(`Std. Error`, 3),
-    `Z Value` = round(`Z Value`, 2),
-    `P Value` = format.pval(`P Value`, digits = 3, eps = 0.0001)
+    `Z Value` = round(`Z Value`, 3),
+    `P Value` = format.pval(`P Value`, digits = 3, eps = 0.0001),
+    `CI lower` = round(`CI lower`,3),
+    `CI upper`=round(`CI upper`,3)
   )
 #random effects
 pre_est_test_random_effects_df <- broom.mixed::tidy(pre_est_test, effects = "ran_pars") 
@@ -906,7 +916,25 @@ pre_est_sc=glmmTMB(
     (1|species),
   family = "binomial")
 
-R2_partition_results_pre_est_sc <-glmm.hp(pre_est_sc,
+#using lme4
+pre_est_sc_lme=lme4::glmer(
+  data = pre_est_data_scaled,
+  formula = records~
+    first_rec_year_sc+
+    CPI_sc+
+    sources_sc+
+    annual_c_int_sc+
+    year_of_mhws_sc+
+    median_sst_sc+
+    long_max_s_sst_sc+
+    (1|h3_id)+
+    (1|species),
+  family = "binomial",
+  control = lme4::glmerControl(
+    optimizer = "bobyqa", # A good default for glmer, but "Nelder_Mead" is default
+    optCtrl = list(maxfun = 10000)))
+MuMIn::r.squaredGLMM(pre_est_sc_lme)
+R2_partition_results_pre_est_sc <-glmm.hp(pre_est_sc_lme,
                                 #iv =iv,
                                 type="R2") # Specify that I want adjusted R2 partitioning
 
@@ -953,6 +981,17 @@ R2_partition_results_pre_est_sc_df=R2_partition_results_pre_est_sc[[2]] %>%
   )
   
 #write.csv(R2_partition_results_pre_est_sc_df,"R2_partition_results_pre_est_sc_df.csv",row.names = F)
+R2_partition_results_pre_est_sc_df=read.csv(
+  "glmms/pre_establishment/R2_partition_results_pre_est_sc_df.csv") %>% 
+  rename(Variable_p=predictors) %>% 
+  mutate(Variable_p=case_when(
+    Variable_p%in%"Year of first record"~"Year of first record",
+    Variable_p%in%"CPI"~"CPI",
+    Variable_p%in%"Sources"~"Effort",
+    Variable_p%in%"Cumulative intensity"~"MHWs",
+    Variable_p%in%"Year"~"Year",
+    Variable_p%in%"SST - spatiotemporal"~"SST (annual)",
+    Variable_p%in%"SST - spatial"~"SST (climate)"))
 ```
 
 ###4.2.2) extract predicted
@@ -1023,10 +1062,7 @@ post_est_test=glmmTMB(
     scale(long_max_s_sst)+
     (1|h3_id)+
     (1|species),
-  family = "binomial",
-  control = glmmTMBControl(optimizer = optim,
-                           optArgs = list(method = "BFGS",
-                                          maxit = 10000)))
+  family = "binomial")
 
 summary(post_est_test)
 performance::check_singularity(post_est_test)
@@ -1035,23 +1071,30 @@ performance::check_overdispersion(post_est_test)
 performance::check_collinearity(post_est_test)
 plot(DHARMa::simulateResiduals(post_est_test))
 MuMIn::r.squaredGLMM(post_est_test)
+performance::r2_nakagawa(post_est_test)
 
 #Summarise table for the model
-fixed_effects_df_post_est_test <- broom.mixed::tidy(post_est_test, effects = "fixed") %>%
+fixed_effects_df_post_est_test <- broom.mixed::tidy(post_est_test, effects = "fixed",
+                                                   conf.level = 0.95,
+                                      conf.int=T) %>%
   # Select and rename columns to match the request
   select(
     Variable = term,
     Coefficient = estimate,
     `Std. Error` = std.error,
     `Z Value` = statistic,
-    `P Value` = p.value
+    `P Value` = p.value,
+    `CI lower` = conf.low,
+    `CI upper`=conf.high
   ) %>%
   # Format numeric columns for clean presentation (e.g., 3 decimal places)
   mutate(
     Coefficient = round(Coefficient, 3),
     `Std. Error` = round(`Std. Error`, 3),
-    `Z Value` = round(`Z Value`, 2),
-    `P Value` = format.pval(`P Value`, digits = 3, eps = 0.0001)
+    `Z Value` = round(`Z Value`, 3),
+    `P Value` = format.pval(`P Value`, digits = 3, eps = 0.0001),
+    `CI lower` = round(`CI lower`,3),
+    `CI upper`=round(`CI upper`,3)
   )
 #random effects
 post_est_test_random_effects_df <- broom.mixed::tidy(post_est_test, effects = "ran_pars") 
@@ -1134,6 +1177,17 @@ R2_partition_results_post_est_sc_df=R2_partition_results_post_est_sc[[2]] %>%
   )
   
 #write.csv(R2_partition_results_post_est_sc_df,"R2_partition_results_post_est_sc_df.csv",row.names = F)
+R2_partition_results_post_est_sc_df=read.csv(
+  "glmms/post_establishment/R2_partition_results_post_est_sc_df.csv") %>% 
+  rename(Variable_p=predictors) %>% 
+  mutate(Variable_p=case_when(
+    Variable_p%in%"Year of first record"~"Year of first record",
+    Variable_p%in%"CPI"~"CPI",
+    Variable_p%in%"Sources"~"Effort",
+    Variable_p%in%"Cumulative intensity"~"MHWs",
+    Variable_p%in%"Year"~"Year",
+    Variable_p%in%"SST - spatiotemporal"~"SST (annual)",
+    Variable_p%in%"SST - spatial"~"SST (climate)"))
 ```
 
 ###4.3.2) extract predicted
@@ -1192,6 +1246,135 @@ all_predictions_combined_post <- prediction_terms_df_post %>%
 ```
 
 ##4.4) Plot phases
+###coefs
+####Plot pre
+```{r}
+fixed_effects_df_pre_est_test_vis=fixed_effects_df_pre_est_test %>%  
+         filter(!Variable%in%"(Intercept)") %>% 
+  mutate(Effect=case_when(`CI lower`>0~"Positive",
+                          `CI upper`<0~"Negative",
+                          TRUE~"Neutral"),
+         Variable_p=case_when(
+                    Variable%in%"scale(first_rec_year)"~"Year of first record",
+                    Variable%in%"scale(CPI)"~"CPI",
+                    Variable%in%"scale(sources)"~"Effort",
+                    Variable%in%"scale(annual_c_int)"~"MHWs",
+                    Variable%in%"scale(year_of_mhws)"~"Year",
+                    Variable%in%"scale(median_sst)"~"SST (annual)",
+                    Variable%in%"scale(long_max_s_sst)"~"SST (climate)")) %>% 
+  left_join(R2_partition_results_pre_est_sc_df,by="Variable_p")
+
+coef_pre_est_p=ggplot(data=fixed_effects_df_pre_est_test_vis)+
+  geom_vline(xintercept = 0,linetype="dashed",color="black")+
+  geom_errorbarh(aes(xmin=`CI lower`,
+                     xmax=`CI upper`,
+                     y=Variable_p),
+                 width=0.1,
+                 color="grey",
+                 size=1)+
+  geom_point(aes(x=Coefficient,
+                 y=reorder(Variable_p,Coefficient),
+                 fill=Effect),
+             shape=21,
+             size=3.5)+
+  scale_fill_manual(values = c("Positive" = "darkgreen", 
+                               "Negative" = "darkred", 
+                               "Neutral" = "white"))+
+  geom_text(data=fixed_effects_df_pre_est_test_vis %>% 
+              drop_na(),
+            aes(x=Coefficient,
+                y=reorder(Variable_p,`I.perc...`),
+                label=paste(`I.perc...`,"%",sep ="")),
+            vjust=-1,
+            size=3)+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank(),
+        legend.position=c(0.85, 0.175),
+        legend.background = element_blank(),
+        legend.key.size = unit(0.5, 'cm'))+
+  scale_x_continuous(breaks = seq(-5,5,by=1))+
+  labs(x="Coefficient",
+       y="Predictor",
+       title="A) Pre-establishment",
+       caption = bquote(R[m]^2 == 0.68*","~~R[c]^2 == 0.72))+
+  coord_cartesian(xlim=c(-3.35,3.35))
+coef_pre_est_p
+ggsave(filename ="./plots/coef_pre_est_p.png" ,plot =coef_pre_est_p ,device = "jpeg",units = "cm",width = 15,height = 12)
+```
+
+####plot post
+```{r}
+fixed_effects_df_post_est_test_vis=fixed_effects_df_post_est_test %>%  
+         filter(!Variable%in%"(Intercept)") %>% 
+  mutate(Effect=case_when(`CI lower`>0~"Positive",
+                          `CI upper`<0~"Negative",
+                          TRUE~"Neutral"),
+         Variable_p=case_when(
+                    Variable%in%"scale(first_rec_year)"~"Year of first record",
+                    Variable%in%"scale(CPI)"~"CPI",
+                    Variable%in%"scale(sources)"~"Effort",
+                    Variable%in%"scale(annual_c_int)"~"MHWs",
+                    Variable%in%"scale(year_of_mhws)"~"Year",
+                    Variable%in%"scale(median_sst)"~"SST (annual)",
+                    Variable%in%"scale(long_max_s_sst)"~"SST (climate)")) %>% 
+  left_join(R2_partition_results_post_est_sc_df,by="Variable_p")
+
+coef_post_est_p=ggplot(data=fixed_effects_df_post_est_test_vis)+
+  geom_vline(xintercept = 0,linetype="dashed",color="black")+
+  geom_errorbarh(aes(xmin=`CI lower`,
+                     xmax=`CI upper`,
+                     y=Variable_p),
+                 width=0.1,
+                 color="grey",
+                 size=1)+
+  geom_point(aes(x=Coefficient,
+                 y=reorder(Variable_p,Coefficient),
+                 fill=Effect),
+             shape=21,
+             size=3.5)+
+  scale_fill_manual(values = c("Positive" = "darkgreen", 
+                               "Negative" = "darkred", 
+                               "Neutral" = "white"))+
+  geom_text(data=fixed_effects_df_post_est_test_vis %>% 
+              drop_na(),
+            aes(y=reorder(Variable_p,`I.perc...`),
+                x=Coefficient,
+                label=paste(`I.perc...`,"%",sep ="")),
+                size=3,
+                vjust=-1)+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank(),
+        legend.position=c(0.85, 0.175),
+        legend.background = element_blank(),
+        legend.key.size = unit(0.5, 'cm'))+
+  scale_x_continuous(breaks = seq(-5,5,by=1))+
+  labs(x="Coefficient",
+       y="Predictor",
+       title="B) Post-establishment",
+       caption = bquote(R[m]^2 == 0.75*","~~R[c]^2 == 0.79))+
+  coord_cartesian(xlim=c(-3.35,3.35))
+coef_post_est_p
+ggsave(filename ="./plots/coef_post_est_p.png" ,plot =coef_post_est_p ,device = "jpeg",units = "cm",width = 15,height = 12)
+```
+
+####Bind
+```{r}
+grid_pre_post_coef=gridExtra::grid.arrange(
+  left="Predictor",
+  bottom="Coefficient",
+  coef_pre_est_p+
+    theme(axis.title = element_blank()),
+  coef_post_est_p+
+    theme(axis.title = element_blank()),
+  layout_matrix = rbind(
+    c(1),
+    c(2)))
+
+
+ggsave(filename ="./plots/grid_pre_post_coef.png" ,plot =grid_pre_post_coef ,device = "jpeg",units = "cm",width = 15,height = 20)
+```
+
+
 ###4.4.1) Year
 ####pre
 ```{r}
