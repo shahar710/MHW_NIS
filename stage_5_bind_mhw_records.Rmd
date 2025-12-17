@@ -195,6 +195,7 @@ annual_sst_lm_slopes=read_rds(
          se = std.error,
          p_value = p.value)
 
+write.csv(annual_sst_lm_slopes,"./annual_sst_rates.csv",row.names = F)
 #Estimate spatial stats across years to differentiate warming trends from the natural longitudinal thermal gradient in the Med.
 sptaial_sst=read_rds(
   "copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m//corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds") %>%
@@ -417,7 +418,8 @@ panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
 ##6.2) used records - hexagons
 ```{r}
 # 2. Convert H3 IDs to Spatial Polygons (sf object)
-used_records_sf <- filtered_data_before_first_record_dt_sst_meff_yfr_cleaned %>%
+used_records_sf <- filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned %>% 
+  #filtered_data_before_first_record_dt_sst_meff_yfr_cleaned %>%
   group_by(h3_id) %>%
   summarise(sum_records=sum(records)) %>% 
   # Pass the entire data frame and specify the H3 column name
@@ -458,7 +460,7 @@ records_map <- ggplot() +
   ) +
   # Apply a clean theme and labels
   labs(
-    title = "A) First records within the temoral range",
+    title = "A) NIS records (1987-2023)",
     x = "Longitude",
     y = "Latitude"
   ) +
@@ -471,12 +473,13 @@ legend.position = c(0.19, 0.89),
 legend.background = element_rect(fill = "transparent", color = NA),
 legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
-    panel.background = element_rect(fill = "skyblue", color = NA))
+    panel.background = element_rect(fill = "skyblue", color = NA),
+axis.title = element_blank())
 ```
 
 ##6.3) SST over time
 ```{r}
-sst_time=filtered_data_before_first_record_dt_sst_meff_yfr_cleaned %>% 
+sst_time=filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned %>% 
   group_by(h3_id) %>% 
   distinct(h3_id,year_of_mhws,median_sst)
 sst_time_p=ggplot(sst_time)+
@@ -484,8 +487,8 @@ sst_time_p=ggplot(sst_time)+
              alpha=0.3)+
   geom_boxplot(aes(x=year_of_mhws,y=median_sst,group=year_of_mhws),
                alpha=0.2,notch=T,outliers = F)+
-  geom_smooth(aes(x=year_of_mhws,y=median_sst),
-              formula = y~x,method = "lm",se = F,color="black")+
+  #geom_smooth(aes(x=year_of_mhws,y=median_sst),
+   #           formula = y~x,method = "lm",se = F,color="black")+
   scale_color_viridis_c(
     name = "SST",
     option = "turbo"
@@ -495,13 +498,55 @@ sst_time_p=ggplot(sst_time)+
   guides(color=F)+
   theme_bw()
 sst_time_p
+
+sst_time_p2=ggplot(sst_time)+
+    geom_point(aes(x=year_of_mhws,y=median_sst,color=median_sst),
+             alpha=0.4)+
+  geom_boxplot(aes(x=year_of_mhws,y=median_sst,group=year_of_mhws),
+               alpha=0.7,outliers = F,color="NA",fill="black",width=1)+
+  stat_summary(
+  aes(x = year_of_mhws, y = median_sst, group = year_of_mhws),
+  fun = median,
+  fun.min = median,
+  fun.max = median,
+  #stroke=0.1,
+  #fill="white",
+  color = "white",
+  #shape=21,
+  geom="crossbar",
+  size=0.2,
+  width=1)+
+  scale_color_gradient(
+    low = "blue",
+    high = "red",
+    name = "SST"
+  ) +
+  # scale_color_viridis_c(
+  #   name = "SST",
+  #   option = "turbo") +
+  labs(x="Years",y="Median SST (°C)",
+       title="B) SST trend across the study area")+
+  guides(color=F)+
+  theme_bw()
+sst_time_p2
 ```
 
 ##6.4) Cumulative intensity over time
 ```{r}
-c_int_time=filtered_data_before_first_record_dt_sst_meff_yfr_cleaned %>% 
+c_int_time=filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned %>% 
   group_by(h3_id) %>% 
-  distinct(h3_id,year_of_mhws,annual_c_int)
+  distinct(h3_id,year_of_mhws,annual_c_int) %>% 
+  mutate(coords = h3jsr::cell_to_point(h3_id),
+    lat = sapply(coords, function(x) x[2]),
+    lon = sapply(coords, function(x) x[1]),
+    lon_round=round(lon,digits = 0)) %>% 
+  select(-coords)
+
+c_int_time_summary=c_int_time %>% 
+  group_by(h3_id,lon) %>% 
+  summarise(mean_c_int=mean(annual_c_int),
+            conf_low=confint(lm(annual_c_int~1))[,1],
+            conf_high=confint(lm(annual_c_int~1))[,2])
 
 c_int_time_p=ggplot(c_int_time)+
   geom_point(aes(x=year_of_mhws,y=annual_c_int,color=annual_c_int),
@@ -520,15 +565,47 @@ c_int_time_p=ggplot(c_int_time)+
   #       legend.background = element_blank(),
   #       legend.key.size = unit(0.4, 'cm'))
 c_int_time_p
+
+#longitudes1
+##
+region_annots <- data.frame(
+  label = c("West Med.", "Central Med.", "East Med."),
+  x     = c(3.25, 18.5, 30.5),      # Approximate visual centers of the basins
+  y     = c(190, 190, 190)   # Set this to the top of your Y-axis
+)
+
+c_int_time_p2=ggplot(c_int_time)+
+  geom_point(aes(x=lon_round,y=annual_c_int,color=annual_c_int),
+             alpha=0.4)+
+  geom_boxplot(aes(x=lon_round,y=annual_c_int,group=lon_round),
+               alpha=0.7,outliers = F,color="NA",fill="black",width=1)+
+  # geom_text(data = region_annots,
+  #           aes(x = x, y = y, label = label),
+  #           fontface = "bold",   # Stands out as a header
+  #           size = 3,
+  #           color = "black") +
+  #coord_cartesian(ylim = c(0, 190), clip = "off")+
+  labs(x="Longitude",y="Cumulative intensity (°C-days)",
+       title="C) MHW cumulative intensity")+
+  guides(color=F)+
+    scale_color_gradient(
+    low = "blue",
+    high = "red",
+    name = "SST") +
+  # scale_color_viridis_c(
+  #   name = "Cumulative intensity",
+  #   option = "turbo")+
+  theme_bw()
+c_int_time_p2
 ```
 
 ##6.5) Time series
 ```{r}
-time_series=filtered_data_before_first_record_dt_sst_meff_yfr_cleaned %>% 
+time_series=filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned %>% 
   group_by(h3_id,species) %>% 
   summarise(series_length=n())
 
-time_series_sp=filtered_data_before_first_record_dt_sst_meff_yfr_cleaned %>% 
+time_series_sp=filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned %>% 
   group_by(species) %>% 
   summarise(distinct_series=n_distinct(h3_id))
 
@@ -571,8 +648,8 @@ Into grid
 ```{r}
 intro_grid=gridExtra::grid.arrange(
   embeded_time_series_in_map,
-  sst_time_p,
-  c_int_time_p,
+  sst_time_p2,
+  c_int_time_p2,
   ncol = 2,
   nrow=2,
   layout_matrix = rbind(c(1,1,1,1,1,1), # Row 1: P1 and P2
@@ -581,7 +658,7 @@ intro_grid=gridExtra::grid.arrange(
                         c(2,2,2,3,3,3),
                         c(2,2,2,3,3,3)))
 
-ggsave(filename ="intro_grid.png" ,plot =intro_grid ,device = "jpeg",units = "cm",width = 20,height = 20)
+ggsave(filename ="./plots/intro_grid2.png" ,plot =intro_grid ,device = "jpeg",units = "cm",width = 20,height = 20)
 ```
 
 ##6.6.1) SST slopes

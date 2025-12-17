@@ -30,9 +30,7 @@ data_models_pre_scaled=data_models %>%
     median_sst_sc = scale(median_sst)[, 1],
     long_max_s_sst_sc=scale(long_max_s_sst)[,1])
 
-data_models$time_series_id %>% n_distinct(
-  
-)
+data_models$time_series_id %>% n_distinct()
 ```
 
 #1) Modeling
@@ -524,6 +522,84 @@ test_main_grid_nc=gridExtra::grid.arrange(
 
 
 ggsave(filename ="test_main_grid_nc.png" ,plot =test_main_grid_nc ,device = "jpeg",units = "cm",width = 15,height = 20)
+```
+##1.3) GLMM with sst rates
+```{r}
+test_main_with_rates=glmmTMB(
+  data = data_models,
+  formula = records~
+    scale(first_rec_year)+
+    scale(CPI)+
+    scale(sources)+
+    scale(annual_c_int)+
+    scale(year_of_mhws)+
+    scale(median_sst)+
+    scale(long_max_s_sst)+
+    scale(sst_slope)+
+    (1|h3_id)+
+    (1|species),
+  family = "binomial",
+  control = glmmTMBControl(optimizer = optim,
+                           optArgs = list(method = "BFGS",
+                                          maxit = 10000)))
+#Colinearity
+##median_s_sst
+ #            Term  VIF   VIF 95% CI Increased SE Tolerance Tolerance 95% CI
+ #   scale(median_sst) 5.90 [5.77, 6.04]         2.43      0.17     [0.17, 0.17]
+ # scale(median_s_sst) 6.03 [5.90, 6.18]         2.46      0.17     [0.16, 0.17]
+
+##max_s_sst - no colinearity!
+
+##min_s_sst - no colinearity!
+
+##mean_s_sst
+# Moderate Correlation
+#               Term  VIF   VIF 95% CI Increased SE Tolerance Tolerance 95% CI
+#  scale(median_sst) 5.36 [5.24, 5.48]         2.32      0.19     [0.18, 0.19]
+#  scale(mean_s_sst) 5.44 [5.32, 5.57]         2.33      0.18     [0.18, 0.19]
+
+#write_rds(test_main,"test_main.rds")
+# test_main=read_rds("glmms\\test_main.rds")
+summary(test_main_with_rates)
+performance::check_singularity(test_main_with_rates)
+performance::check_convergence(test_main_with_rates)
+performance::check_overdispersion(test_main_with_rates)
+performance::check_collinearity(test_main_with_rates)
+plot(DHARMa::simulateResiduals(test_main_with_rates))
+MuMIn::r.squaredGLMM(test_main_with_rates)
+performance::r2_nakagawa(test_main_with_rates)
+
+#Summarise table for the model
+fixed_effects_df <- broom.mixed::tidy(test_main_with_rates, effects = "fixed",
+                                      conf.level = 0.95,
+                                      conf.int=T) %>%
+  # Select and rename columns to match the request
+  select(
+    Variable = term,
+    Coefficient = estimate,
+    `Std. Error` = std.error,
+    `Z Value` = statistic,
+    `P Value` = p.value,
+    `CI lower` = conf.low,
+    `CI upper`=conf.high
+  ) %>%
+  # Format numeric columns for clean presentation (e.g., 3 decimal places)
+  mutate(
+    Coefficient = round(Coefficient, 3),
+    `Std. Error` = round(`Std. Error`, 3),
+    `Z Value` = round(`Z Value`, 3),
+    `P Value` = format.pval(`P Value`, digits = 3, eps = 0.0001),
+    `CI lower` = round(`CI lower`,3),
+    `CI upper`=round(`CI upper`,3)
+  )
+#random effects
+random_effects_df <- broom.mixed::tidy(test_main, effects = "ran_pars") 
+
+#write.csv(fixed_effects_df,"fixed_effects_df_binomial.csv",row.names = F)
+
+#Binomial model: AIC = 7687.6
+#Betabinomial model: AIC = 7689.6
+#Delta
 ```
 
 #3) Model selection
