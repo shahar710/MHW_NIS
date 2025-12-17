@@ -474,7 +474,11 @@ legend.background = element_rect(fill = "transparent", color = NA),
 legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
     panel.background = element_rect(fill = "skyblue", color = NA),
-axis.title = element_blank())
+axis.title = element_blank())+
+  geom_point(aes(x = 32.348677, y = 31.261634), 
+             color = "black", size = 3, shape = 21,fill="white") +
+  annotate("text", x = 32.348677, y = 31.261634 + 0.5, 
+           label = "Suez Canal", size = 3, hjust = 0.5,vjust=3)
 ```
 
 ##6.3) SST over time
@@ -665,6 +669,7 @@ ggsave(filename ="./plots/intro_grid2.png" ,plot =intro_grid ,device = "jpeg",un
 ```{r}
 # 2. Convert H3 IDs to Spatial Polygons (sf object)
 sptaial_sst_slope_sf <- annual_sst_lm_slopes  %>% 
+  filter(h3_id%in%filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned$h3_id %>% unique) %>% 
   # Pass the entire data frame and specify the H3 column name
   h3jsr::cell_to_polygon(
     input = .,               # '.' refers to the incoming data frame
@@ -703,7 +708,7 @@ sst_slope_map <- ggplot() +
   ) +
   # Apply a clean theme and labels
   labs(
-    title = "A) SST warming rates",
+    title = "A) Annual SST rates",
     x = "Longitude",
     y = "Latitude"
   ) +
@@ -717,15 +722,22 @@ legend.background = element_rect(fill = "transparent", color = NA),
 legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "#DBDBDC", linewidth = 0.2),
     panel.background = element_rect(fill = "#DBDBDC", color = NA) 
-  )
+  )+
+  geom_point(aes(x=32.348677, y = 31.261634), 
+             color = "black", size = 3, shape = 21, fill="white") +
+  annotate("text", x=32.348677, y = 31.261634 + 0.5, 
+           label = "Suez Canal", size = 3, hjust = 0.5,vjust=3)
 sst_slope_map
 ```
 
 
 ##6.6.2) spatial SST
 ```{r}
+
+h3_subset=filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned$h3_id %>% unique
 # 2. Convert H3 IDs to Spatial Polygons (sf object)
 sptaial_sst_sf <- sptaial_sst  %>% 
+  filter(h3_id%in%h3_subset) %>%
   # Pass the entire data frame and specify the H3 column name
   h3jsr::cell_to_polygon(
     input = .,               # '.' refers to the incoming data frame
@@ -764,7 +776,7 @@ sst_map <- ggplot() +
   ) +
   # Apply a clean theme and labels
   labs(
-    title = "B) Spatial SST",
+    title = "B) SST - climate",
     x = "Longitude",
     y = "Latitude"
   ) +
@@ -778,7 +790,11 @@ legend.background = element_rect(fill = "transparent", color = NA),
 legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "#DBDBDC", linewidth = 0.2),
     panel.background = element_rect(fill = "#DBDBDC", color = NA) 
-  )
+  )+
+  geom_point(aes(x=32.348677, y = 31.261634), 
+             color = "black", size = 3, shape = 21, fill="white") +
+  annotate("text", x=32.348677, y = 31.261634 + 0.5, 
+           label = "Suez Canal", size = 3, hjust = 0.5,vjust=3)
 sst_map
 ```
 
@@ -791,6 +807,7 @@ spatial_c_int_dt=annual_c_int_dt  %>%
 
 # 2. Convert H3 IDs to Spatial Polygons (sf object)
 spatial_c_int_dt_sf <- spatial_c_int_dt %>% 
+  filter(h3_id%in%h3_subset) %>% 
   # Pass the entire data frame and specify the H3 column name
   h3jsr::cell_to_polygon(
     input = .,               # '.' refers to the incoming data frame
@@ -829,7 +846,7 @@ max_c_int_map <- ggplot() +
   ) +
   # Apply a clean theme and labels
   labs(
-    title = "C) Spatial cumulative intensity",
+    title = "C) MHWs",
     x = "Longitude",
     y = "Latitude"
   ) +
@@ -843,7 +860,11 @@ legend.background = element_rect(fill = "transparent", color = NA),
 legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "#DBDBDC", linewidth = 0.2),
     panel.background = element_rect(fill = "#DBDBDC", color = NA) 
-  )
+  )+
+  geom_point(aes(x=32.348677, y = 31.261634), 
+             color = "black", size = 3, shape = 21, fill="white") +
+  annotate("text", x=32.348677, y = 31.261634 + 0.5, 
+           label = "Suez Canal", size = 3, hjust = 0.5,vjust=3)
 max_c_int_map
 ```
 
@@ -857,13 +878,13 @@ spatial_temp_panel=gridExtra::grid.arrange(bottom="Longitude",
   layout_matrix = rbind(c(1),
                         c(2),
                         c(3)))
-ggsave(filename ="spatial_temp_panel.png" ,plot =spatial_temp_panel ,device = "jpeg",units = "cm",width = 13,height = 26)
+ggsave(filename ="./plots/spatial_temp_panel.png" ,plot =spatial_temp_panel ,device = "jpeg",units = "cm",width = 13,height = 26)
 ```
 
 ##6.8) monitoring effort control
 ```{r}
 #plot
-source_temp=ggplot(filtered_data_before_first_record_dt_sst_meff_yfr_cleaned %>% 
+source_temp=ggplot(filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned %>% 
                      ungroup() %>% 
                      distinct(h3_id,year_of_records,sources))+
   geom_jitter(data=filtered_data_before_first_record_dt_sst_meff %>% 
@@ -887,7 +908,7 @@ source_temp=ggplot(filtered_data_before_first_record_dt_sst_meff_yfr_cleaned %>%
 ```{r}
 # 2. Convert H3 IDs to Spatial Polygons (sf object)
 ormef_sf <- ormef_h3_id %>%
-  filter(h3_id%in%intersect(filtered_data_before_first_record_dt_sst_meff_yfr_cleaned$h3_id %>% unique(),ormef_h3_id_year$h3_id %>% unique)) %>% 
+  filter(h3_id%in%intersect(filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned$h3_id %>% unique(),ormef_h3_id_year$h3_id %>% unique)) %>% 
   # Pass the entire data frame and specify the H3 column name
   h3jsr::cell_to_polygon(
     input = .,               # '.' refers to the incoming data frame
@@ -940,7 +961,11 @@ legend.background = element_rect(fill = "transparent", color = NA),
 legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "#DBDBDC", linewidth = 0.2),
     panel.background = element_rect(fill = "#DBDBDC", color = NA) 
-  )
+  ) +
+  geom_point(aes(x=32.348677, y = 31.261634), 
+             color = "black", size = 3, shape = 21, fill="white") +
+  annotate("text", x=32.348677, y = 31.261634 + 0.5, 
+           label = "Suez Canal", size = 3, hjust = 0.5,vjust=3)
 h3_map
 ```
 
@@ -954,7 +979,7 @@ bias_grid=gridExtra::grid.arrange(
                         c(1, 1,1,1,1,1,1),# Row 1: P1 and P2
                         c(NA,2,2,2,2,2,NA),
                         c(NA,2,2,2,2,2,NA)))
-ggsave(filename ="bias_grid.png" ,plot =bias_grid ,device = "jpeg",units = "cm",width = 20,height = 20)
+ggsave(filename ="./plots/bias_grid.png" ,plot =bias_grid ,device = "jpeg",units = "cm",width = 20,height = 20)
 ```
 
 ##6.10) CPI
@@ -1018,11 +1043,11 @@ legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "#DBDBDC", linewidth = 0.2),
     panel.background = element_rect(fill = "#DBDBDC", color = NA) 
   )+
-  geom_point(aes(x = 32.385074, y = 31.332367), 
-             color = "black", size = 3, shape = 20) +
-  annotate("text", x = 32.385074, y = 31.332367 + 0.5, 
+  geom_point(aes(x=32.348677, y = 31.261634), 
+             color = "black", size = 3, shape = 21, fill="white") +
+  annotate("text", x=32.348677, y = 31.261634 + 0.5, 
            label = "Suez Canal", size = 3, hjust = 0.5,vjust=3)
 
-ggsave(filename ="cpi_map.png" ,plot =cpi_map ,device = "jpeg",units = "cm",width = 20,height = 12)
+ggsave(filename ="./plots/cpi_map.png" ,plot =cpi_map ,device = "jpeg",units = "cm",width = 20,height = 12)
 ```
 
