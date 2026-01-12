@@ -5,7 +5,7 @@ date: "2025-09-24"
 output: html_document
 ---
 
-Bind climatologies with thinned records data
+Bind climatologies and MHWs with thinned records data
 
 Libraries
 ```{r}
@@ -15,11 +15,11 @@ library(tidyverse)
 #data
 ```{r}
 #detrended
-clim_dt=read_rds("climatology_dt_df.rds")
-events_dt=read_rds("event_dt_df.rds")
+clim_dt=read_rds("./climatology_mhws/climatology_dt_df.rds")
+events_dt=read_rds("./climatology_mhws/event_dt_df.rds")
 
 #Records
-records=read_csv("records data/cleaned/records_cleaned_harm_8_10_25.csv") %>% 
+records=read_csv("./records data/cleaned/records_cleaned_harm_8_10_25.csv") %>% 
   #remove marmara and black sea records that are not in the climatic model
   filter(!h3_id%in%c("831ec8fffffffff", "831ec9fffffffff", "832d05fffffffff"))
 ```
@@ -63,7 +63,7 @@ records_min_count=records_min %>%
   rename(year_of_records=year)
 ```
 
-#2) detrended cumulative intensity
+#2) detrended baseline cumulative intensity
 Estimate detrended annual cumulative intensity per hexagon
 ```{r}
 annual_c_int_dt=clim_dt %>% 
@@ -152,7 +152,7 @@ filtered_data_before_first_record_dt <- final_data_clean_dt %>%
   ungroup() %>%
   filter(!is.na(species)) %>% 
   group_by(h3_id,species) %>%
-  filter(sum(records)>0) %>% 
+  filter(sum(records)>0) %>% #remoce time series with no records
   ungroup()
 
 #Check that there are no species with zero sum across hexagons and years
@@ -167,7 +167,7 @@ filtered_data_before_first_record_dt %>%
 ```{r}
 #Estimate the annual median temperature within hexagons
 annual_sst=read_rds(
-  "copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m//corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds") %>%
+  "./copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m//corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds") %>%
   mutate(h3_id = str_remove(h3_id, "_cleaned"),
          year_of_mhws=lubridate::year(date)) %>% 
   group_by(h3_id,year_of_mhws) %>% 
@@ -195,10 +195,10 @@ annual_sst_lm_slopes=read_rds(
          se = std.error,
          p_value = p.value)
 
-write.csv(annual_sst_lm_slopes,"./annual_sst_rates.csv",row.names = F)
+#write.csv(annual_sst_lm_slopes,"./annual_sst_rates.csv",row.names = F)
 #Estimate spatial stats across years to differentiate warming trends from the natural longitudinal thermal gradient in the Med.
 sptaial_sst=read_rds(
-  "copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m//corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds") %>%
+  "./copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m//corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds") %>%
   mutate(h3_id = str_remove(h3_id, "_cleaned"),
          year_of_mhws=lubridate::year(date)) %>% 
   group_by(h3_id,year_of_mhws) %>% 
@@ -229,7 +229,7 @@ Account for monitoring effort by years and h3_id
 This specifically accounts for the increased monitoring effort over time
 ```{r}
 #Proxy for monitoring effort
-ormef <- read.delim("C:\\Users\\User\\Desktop\\research\\data\\ORMEF\\89476.tsv") %>% 
+ormef <- read.delim("./records data/ORMEF/89476.tsv") %>% 
   mutate(
     # 1. str_replace() changes all commas (",") in the string to a period (".")
     Decimal_Lat = str_replace(Decimal_Lat, ",", "."),
@@ -309,7 +309,7 @@ filtered_data_before_first_record_dt_sst_meff=filtered_data_before_first_record_
 ##4.3) Add year of first record
 Species level variable
 ```{r}
-year_of_f_rec=read.csv("records data/cleaned/records_cleaned_harm_8_10_25.csv") %>% 
+year_of_f_rec=read.csv("./records data/cleaned/records_cleaned_harm_8_10_25.csv") %>% 
   group_by(species) %>% 
   summarise(first_rec_year=min(year))
 
@@ -412,7 +412,7 @@ legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
     panel.background = element_rect(fill = "skyblue", color = NA))
 
-# ggsave(filename ="rec_thinned_map.png" ,plot =rec_thinned_map ,device = "jpeg",units = "cm",width = 25,height = 12)
+# ggsave(filename ="./plots/rec_thinned_map.png" ,plot =rec_thinned_map ,device = "jpeg",units = "cm",width = 25,height = 12)
 ```
 
 ##6.2) used records - hexagons

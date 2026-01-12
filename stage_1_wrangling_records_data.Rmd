@@ -4,60 +4,59 @@ author: "Shahar Chaikin"
 date: "2025-09-12"
 output: html_document
 ---
-I am going to intensly clean this data following these rules:
+The provided NIS record data are about to be wrangled following these rules:
 
 1. Global Data Integrity and Filtering Rules
 These rules apply to the entire row and determine which records are retained.
 
-Duplicate Removal: Any row that is a complete duplicate across all columns is removed, keeping only one unique instance using the distinct() function.
+- Duplicate Removal: Any row that is a complete duplicate across all columns is removed, keeping only one unique instance using the distinct() function.
 
-Minimum Data Requirement: Only rows with successfully converted and non-missing values in new_year, new_lat, and new_long are retained.
+- Minimum Data Requirement: Only rows with successfully converted and non-missing values in new_year, new_lat, and new_long are retained.
 
-Symmetrical Coordinates Filter: Rows where the cleaned latitude (new_lat) is numerically identical to the cleaned longitude (new_long) are removed, as this often indicates data entry error (checked using round(.x, 6) for precision).
+- Symmetrical Coordinates Filter: Rows where the cleaned latitude (new_lat) is numerically identical to the cleaned longitude (new_long) are removed, as this often indicates data entry error (checked using round(.x, 6) for precision).
 
 2. Year (year) Cleaning Rules
 Year cleaning ensures the values are proper four-digit years and flags any changes.
 
-Typo Correction: Specific typos are fixed:
+- Typo Correction: Specific typos are fixed:
 
 "2029" is corrected to 2020.
 
 "20161" is corrected to 2016.
 
-Incomplete/Range Filtering (Deletion): Any original year that is not a four-digit string (e.g., "20", <2014, 1986-2001) results in the row being deleted.
+- Incomplete/Range Filtering (Deletion): Any original year that is not a four-digit string (e.g., "20", <2014, 1986-2001) results in the row being deleted.
 
-Change Tracking: The year_changed flag is set to TRUE if any specific typo correction occurred or if the original year was invalid.
+- Change Tracking: The year_changed flag is set to TRUE if any specific typo correction occurred or if the original year was invalid.
 
 3. Coordinate (lat and long) Preprocessing and Formatting
 These steps clean up non-standard separators and characters before conversion.
 
-Decimal Space Fix: Spurious spaces around the decimal point are removed (e.g., "37. 0255" becomes "37.0255").
+- Decimal Space Fix: Spurious spaces around the decimal point are removed (e.g., "37. 0255" becomes "37.0255").
 
-Trailing Digit Removal: Excessive trailing whitespace and any single separated digit at the end of a coordinate string are removed (e.g., "34.184593     5" becomes "34.184593").
+- Trailing Digit Removal: Excessive trailing whitespace and any single separated digit at the end of a coordinate string are removed (e.g., "34.184593     5" becomes "34.184593").
 
-8-Digit Format Correction: Coordinates consisting of exactly eight digits (e.g., "34680278") are converted by inserting a decimal point after the first two digits (e.g., "34.680278").
+- 8-Digit Format Correction: Coordinates consisting of exactly eight digits (e.g., "34680278") are converted by inserting a decimal point after the first two digits (e.g., "34.680278").
 
-Split Coordinate Fix: If a comma-separated coordinate pair is found in the lat column (e.g., "42.194238, 18.887795"), the second value is moved to the long column.
+- Split Coordinate Fix: If a comma-separated coordinate pair is found in the lat column (e.g., "42.194238, 18.887795"), the second value is moved to the long column.
 
-Corrupt String Fix (Rule 6): Corrupt DMS strings (e.g., '32 56 5+F940') are cleaned by removing the erroneous non-coordinate text.
+- Corrupt String Fix (Rule 6): Corrupt DMS strings (e.g., '32 56 5+F940') are cleaned by removing the erroneous non-coordinate text.
 
 4. Coordinate Conversion and Conditional Swapping
 This section handles the complex conversion from DMS to Decimal Degrees (DD) and the conditional swapping of lat and long.
 
-DMS Conversion: Strings identified as Degree-Minute-Second (DMS) format (e.g., using spaces, quotes, or degree symbols) are converted to Decimal Degrees using a custom function.
+- DMS Conversion: Strings identified as Degree-Minute-Second (DMS) format (e.g., using spaces, quotes, or degree symbols) are converted to Decimal Degrees using a custom function.
 
-DMS Typo Logic: If the "seconds" component in a DMS string is greater than 60 (e.g., "34 32 960"), it is interpreted as decimal minutes (e.g., 34∘32.960 ′), correcting a probable transcription error.
+- DMS Typo Logic: If the "seconds" component in a DMS string is greater than 60 (e.g., "34 32 960"), it is interpreted as decimal minutes (e.g., 34∘32.960 ′), correcting a probable transcription error.
 
-Conditional Swapping Rules (Flips): The raw lat and long columns are swapped before final DD conversion if:
+- Conditional Swapping Rules (Flips): The raw lat and long columns are swapped before final DD conversion if:
 
-General (Mediterranean Bounds Check): The coordinates are in a DMS-like format and leaving them non-flipped results in coordinates outside the Mediterranean Sea bounding box (Lat[28∘,46 ∘], Long[−6 ∘ ,37 ∘]).
+--General (Mediterranean Bounds Check): The coordinates are in a DMS-like format and leaving them non-flipped results in coordinates outside the Mediterranean Sea bounding box (Lat[28∘,46 ∘], Long[−6 ∘ ,37 ∘]).
 
-Cyprus Exception: The coordinates are in a DMS-like format, the country is "Cyprus", and the non-flipped DD latitude is less than 34 ∘ .
+- Cyprus Exception: The coordinates are in a DMS-like format, the country is "Cyprus", and the non-flipped DD latitude is less than 34 ∘ .
 
-Bad Resolution Filter: Rows where the final DD conversion results in a simple integer (e.g., 31) are removed, unless that value was successfully generated from a high-precision DMS format, which addresses the "bad resolution" issue.
+- Bad Resolution Filter: Rows where the final DD conversion results in a simple integer (e.g., 31) are removed, unless that value was successfully generated from a high-precision DMS format, which addresses the "bad resolution" issue.
 
-Change Tracking: lat_changed and long_changed flags are set to TRUE if any preprocessing, splitting, swapping, or DMS conversion occurred on that record.
-
+- Change Tracking: lat_changed and long_changed flags are set to TRUE if any preprocessing, splitting, swapping, or DMS conversion occurred on that record.
 
 libraries
 ```{r}
@@ -122,12 +121,11 @@ MED_LONG_MIN <- -6.03
 MED_LONG_MAX <- 36.22
 ```
 
-
 New version - all automatically
 ```{r}
 # Load the data and perform initial column selection/renaming
 records<- read.csv(
-  "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\records data/raw/New coordinates 8.10.25.csv",
+  "./records data/raw/New coordinates 8.10.25.csv",
   fileEncoding = "latin1"
 ) %>%
   select(species,
@@ -316,7 +314,6 @@ records_cleaned_lite$lat=as.numeric(records_cleaned_lite$lat)
 records_cleaned_lite$long=as.numeric(records_cleaned_lite$long)
 ```
 
-
 Plot
 ```{r}
 # 1. Get world map data
@@ -361,11 +358,8 @@ panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
     panel.background = element_rect(fill = "skyblue", color = NA) 
   )
 
-ggsave(filename ="raw_rec_map.png" ,plot =raw_rec_map ,device = "jpeg",units = "cm",width = 25,height = 12)
-
+#ggsave(filename ="raw_rec_map.png" ,plot =raw_rec_map ,device = "jpeg",units = "cm",width = 25,height = 12)
 ```
-
-
 
 Records data
 ```{r eval=FALSE, include=FALSE}
@@ -465,8 +459,7 @@ records_lite=read.csv("C:\\Users\\User\\Desktop\\research\\Mentoring and colabor
          !long>36.22,
          !long<(-6.03))
 
-
-write.csv(records_lite,"records_cleaned_8_10_2025.csv",row.names = F)
+#write.csv(records_lite,"records_cleaned_8_10_2025.csv",row.names = F)
 ```
 
 Harmonize species names
@@ -513,8 +506,6 @@ records_lite_harm=records_cleaned_lite %>%
 #write.csv(records_lite_harm,"records_cleaned_harm_8_10_25.csv",row.names = F)
 ```
 
-
-
 Extrat the h3 IDs of which climatic data is needed
 ```{r}
 coords=records_cleaned_lite %>% 
@@ -523,6 +514,5 @@ coords=records_cleaned_lite %>%
   distinct(h3_id)
 
 #export h3_ids
-write.csv(coords,"coords_for_clim_extr.csv",row.names = F)
+#write.csv(coords,"coords_for_clim_extr.csv",row.names = F)
 ```
-

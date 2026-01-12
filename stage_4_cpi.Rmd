@@ -1,13 +1,19 @@
 ---
 title: "current_weighted_distance"
-author: "Shahar Chaikin"
+author: "Shahar Chaikin & Georgous Vagenas"
 date: "2025-10-10"
 output: html_document
 ---
 
+In this code we will extract surface current velocity and dirction data from the Copernicus Marine Service. This data will be used to develop an index quntifying current alignment and propagation across hexagons (i.e., CPI).
+
 libraries
 ```{r}
 library(tidyverse)
+library(geosphere)
+library(dplyr)
+library(purrr)
+library(h3jsr)
 ```
 
 Data
@@ -26,7 +32,6 @@ currents=stars::read_ncdf(
                          coords = c("longitude", "latitude"),
                          crs = 4326),
     res = 3))
-
 ```
 
 Median current velocity per h3
@@ -170,20 +175,20 @@ e_n_maps=gridExtra::grid.arrange(
                         c(2)))
 
 e_n_maps
-ggsave(filename ="e_n_maps_all.png" ,plot =e_n_maps ,device = "jpeg",units = "cm",width = 20,height = 20)
+#ggsave(filename ="./plots/e_n_maps_all.png" ,plot =e_n_maps ,device = "jpeg",units = "cm",width = 20,height = 20)
 ```
 
-#1) candidate index - Directional Current Index (DCI)
-Higher scores for hexagons with current directionality that aligns with the bearign from the Suez Canal mouth to the target hexagon.
+#1) DCI - Directional Current Index (DCI)
+Higher scores for hexagons with current direction that aligns with the bearing from the Suez Canal mouth to the target hexagon.
 
- Step 1: Data Preparation and Centroid Calculation
+##Step 1: Data preparation and centroid calculation
 ```{r}
 library(geosphere) # Good for calculating distances on a sphere
 
 # The Suez Canal Source H3 ID
 SOURCE_H3 <- "833e65fffffffff"
 
-# --- Assuming 'currents_median' has columns: h3_id, median_eastern (uo), median_northern (vo) ---
+# --- Assuming 'currents_median' has columns: h3_id, median_eastern (uo), median_northern (vo)
 
 # 1. Calculate Centroids for all hexagons
 # The h3_to_point function gives the center latitude and longitude
@@ -204,7 +209,7 @@ SOURCE_LAT <- 31.332367
 SOURCE_LON <- 32.385074 
 ```
  
- Step 2: Calculate Dispersal Vector (D) and Euclidean Distance
+##Step 2: Calculate dispersal vector (D) and euclidean distance
 ```{r}
 dci_data <- h3_centroids %>%
   rowwise() %>%
@@ -222,10 +227,10 @@ dci_data <- h3_centroids %>%
   select(-d_Euclidean)
 ```
  
- Step 3: Calculate Current Assistance (Dot Product)
+##Step 3: Calculate current assistance (dot product)
 calculating the dot product to find the component of the current that aids (or opposes) travel along the direct line to the source.
 
-Convert Bearing to Radians and Unit Vector: The bearing (direction of D) must be converted from degrees to radians, and then split into x (East/West) and y (North/South) components.
+Convert bearing to radians and unit vector: The bearing (direction of D) must be converted from degrees to radians, and then split into x (East/West) and y (North/South) components.
 
 V = net Current Vector (V) - It is defined by the median current velocities extracted from the Copernicus data
 
@@ -278,11 +283,10 @@ dci_data_step_3 <- dci_data %>%
   ungroup()
 
 #write.csv(dci_data_step_3,"dci_index.csv",row.names = F)
-
 ```
 
 Explanation paragraph:
-To accurately account for the non-random spatial spread of non-indigenous species (NIS) following the prevalent oceanographic regime, we developed a novel predictor variable: the Distance-Penalized Directional Current Index (DCI P). This index was incorporated into the GLMM to isolate the effect of physical dispersal mechanisms from general time trends. The DCI P was calculated for each h3 hexagon as the product of the Current Assistance and an Exponential Distance Decay Penalty. The Current Assistance component was derived from the dot product (V⋅D), where V is the local median current velocity vector (uo and vo) and D is the unit vector defining the straight-line path from the Suez Canal source hexagon to the target hexagon. This dot product yields a value in m/s that is positive when the local current assists travel toward the target, and negative when the current opposes it. This assistance value was then penalized using an exponential decay function, e (−λ×Distance km ) , where Distance km is the Euclidean distance from the source. This penalty ensures that the index heavily weights against long-distance dispersal, reflecting the inherent ecological resistance of colonization over great distances. Consequently, a positive DCI P value indicates a hexagon is highly favorable for colonization (supported by current and close to the source), while a negative DCI P  value indicates strong opposition from the current, typically observed in westward locations against the prevailing counter-clockwise circulation.
+To accurately account for the non-random spatial spread of non-indigenous species (NIS) following the prevalent oceanographic regime, we developed a predictor variable: the Distance-Penalized Directional Current Index (DCI P). This index was incorporated into the GLMM to isolate the effect of physical dispersal mechanisms from general time trends. The DCI P was calculated for each h3 hexagon as the product of the Current Assistance and an Exponential Distance Decay Penalty. The Current Assistance component was derived from the dot product (V⋅D), where V is the local median current velocity vector (uo and vo) and D is the unit vector defining the straight-line path from the Suez Canal source hexagon to the target hexagon. This dot product yields a value in m/s that is positive when the local current assists travel toward the target, and negative when the current opposes it. This assistance value was then penalized using an exponential decay function, e (−λ×Distance km ) , where Distance km is the Euclidean distance from the source. This penalty ensures that the index heavily weights against long-distance dispersal, reflecting the inherent ecological resistance of colonization over great distances. Consequently, a positive DCI P value indicates a hexagon is highly favorable for colonization (supported by current and close to the source), while a negative DCI P  value indicates strong opposition from the current, typically observed in westward locations against the prevailing counter-clockwise circulation.
 
 
 Interpretation of Directional Current Index (DCI)
@@ -352,25 +356,19 @@ panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
     panel.background = element_rect(fill = "skyblue", color = NA) 
   )
 dci_p_map
-ggsave(filename ="dci_p_map_all.png" ,plot =dci_p_map ,device = "jpeg",units = "cm",width = 20,height = 12)
+#ggsave(filename ="./plots/dci_p_map_all.png" ,plot =dci_p_map ,device = "jpeg",units = "cm",width = 20,height = 12)
 ```
 
+#2) Current Propagation Index (CPI)
+This index gives more weight for the propgation effect. Hexagons aligned with nearby hexagons are taken into account.
 
-#ALTERNATIVE APPROACH - VAGENAS
-
+## Step 1: Simplified hexagon distance calculation
 ```{r}
-
-library(geosphere)
-library(dplyr)
-library(purrr)
-library(h3jsr)
-
 # The Suez Canal Source H3 ID
 SOURCE_H3 <- "833e65fffffffff"
 SOURCE_LAT <- 31.332367
 SOURCE_LON <- 32.385074 
 
-# Step 1: Simplified hexagon distance calculation using correct h3jsr functions
 calculate_hexagon_distance_simple <- function(target_h3, source_h3) {
   max_rings <- 100  # Adjust based on your study area size
   
@@ -384,7 +382,10 @@ calculate_hexagon_distance_simple <- function(target_h3, source_h3) {
   return(Inf)  # Beyond max search distance
 }
 
-# Step 2: Calculate CPI components
+###########################
+##Calculate CPI components#
+###########################
+
 cpi_data <- h3_centroids %>%
   rowwise() %>%
   mutate(
@@ -494,11 +495,12 @@ direction_map <- ggplot() +
   )
 
 print(direction_map)
-# ggsave(filename ="direction_map_all.png" ,plot =direction_map ,device = "jpeg",units = "cm",width = 20,height = 12)
+# ggsave(filename ="./plots/direction_map_all.png" ,plot =direction_map ,device = "jpeg",units = "cm",width = 20,height = 12)
 
 #Somthing is unintuitive in North Africa, the direction is Westward and not eastward
 ```
-CALCULATE B parameter (current propagation index)
+
+##step 2: Calculate B parameter
 ```{r}
 
 # Calculate Component B with current propagation from Suez Canal
@@ -602,15 +604,9 @@ cpi_data_with_B <- cpi_data %>%
   mutate(B = b_propagation[h3_id])
 
 # Check the results
-cat("=== PROPAGATION-BASED COMPONENT B STATISTICS ===\n")
+#PROPAGATION-BASED COMPONENT B STATISTICS
 summary(cpi_data_with_B$B)
-
-# Detailed statistics
-cat("\nDetailed B Statistics:\n")
-cat("Range:", range(cpi_data_with_B$B), "\n")
-cat("Mean:", mean(cpi_data_with_B$B), "\n")
-cat("Median:", median(cpi_data_with_B$B), "\n")
-cat("Standard Deviation:", sd(cpi_data_with_B$B), "\n")
+sd(cpi_data_with_B$B)
 cat("Positive values:", sum(cpi_data_with_B$B > 0), "/", nrow(cpi_data_with_B), "\n")
 cat("Negative values:", sum(cpi_data_with_B$B < 0), "/", nrow(cpi_data_with_B), "\n")
 
@@ -668,18 +664,15 @@ legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
     panel.background = element_rect(fill = "skyblue", color = NA))
 
-ggsave(filename ="component_B_propagation_map_all.png" ,plot =component_B_propagation_map ,device = "jpeg",units = "cm",width = 20,height = 12)
+#ggsave(filename =".plots/component_B_propagation_map_all.png" ,plot =component_B_propagation_map ,device = "jpeg",units = "cm",width = 20,height = 12)
 ```
 
-
-CALCULATE C (Decay parameter) AND SYNTHESIS OF CPI
+##step 3: Calculate C (Decay parameter) and synthesis of CPI
 ```{r}
-
-
-# Calculate Component C: Decay factor
+# Calculate component C: decay factor
 # C = e^(-λ × A) where λ is a decay parameter
 
-# Choose a lambda value - you can adjust this based on your needs
+# Choose a lambda value
 # Smaller lambda = slower decay, larger lambda = faster decay
 lambda <- 4 #the best
 
@@ -690,8 +683,7 @@ cpi_data_with_C <- cpi_data_with_B %>%
     C = exp(-lambda * A),
     
     # Final CPI: A × B × C
-    CPI = A * B * C
-  )
+    CPI = A * B * C)
 
 
 # Check all components
@@ -769,9 +761,9 @@ legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
     panel.background = element_rect(fill = "skyblue", color = NA))
 
-ggsave(filename ="component_B_propagation_map_dd_all.png" ,plot =cpi_map ,device = "jpeg",units = "cm",width = 20,height = 12)
+#ggsave(filename ="./plots/component_B_propagation_map_dd_all.png" ,plot =cpi_map ,device = "jpeg",units = "cm",width = 20,height = 12)
 
-write.csv(cpi_data_with_C,"cpi_data_with_C_all.csv",row.names = F)
+#write.csv(cpi_data_with_C,"cpi_data_with_C_all.csv",row.names = F)
 
 # Show relationship between components
 cat("\n=== COMPONENT RELATIONSHIPS ===\n")

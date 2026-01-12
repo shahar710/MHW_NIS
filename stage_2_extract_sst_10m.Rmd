@@ -4,6 +4,7 @@ author: "Shahar Chaikin"
 date: "2025-09-12"
 output: html_document
 ---
+In this code we will extract SST data based on the hexagons that represent the records data. Data will be extracted directly form the "MEDSEA_MULTIYEAR_PHY_006_004" of the Copernicus Marine Service.
 
 libraries
 Install latest developmental version from R-Universe:
@@ -19,7 +20,7 @@ library(stars) # To handle spatiotemporal raster data
 
 Hexagons to be used for downloading climatic data
 ```{r}
-  hex=read.csv("records data/cleaned/records_cleaned_harm_8_10_25.csv") %>% 
+  hex=read.csv("./records data/cleaned/records_cleaned_harm_8_10_25.csv") %>% 
   select(h3_id) %>% 
   distinct()
 hex_medits=read.csv("h3_medits2.csv") %>% 
@@ -198,7 +199,7 @@ Loop it
 ```{r}
 # 1. Define the input and output directories
 input_dir <- "copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/"
-output_dir <- "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m\\corrected_hex_level_data\\"
+output_dir <- "./copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m\\corrected_hex_level_data\\"
 
 # Ensure the output directory exists
 if (!dir.exists(output_dir)) {
@@ -285,7 +286,7 @@ test_dial_data=test %>%
 test_dial_data$n %>% hist
 ```
 
-which files are not written?
+Check if there are files that are not written
 ```{r}
 # Get a list of the base filenames (without path or extension)
 original_files <- tools::file_path_sans_ext(basename(list.files(input_dir, pattern = "\\.rds$")))
@@ -313,8 +314,8 @@ Plot data and trends by hexagons
 h3 with geom_hex
 ```{r}
 # 1. Define the input and output directories
-input_dir <- "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\"
-output_dir <- "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\h3_hex_plots\\"
+input_dir <- "./copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\"
+output_dir <- "./copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\h3_hex_plots\\"
 
 # Ensure the output directory exists
 if (!dir.exists(output_dir)) {
@@ -378,8 +379,8 @@ for (file_path in file_list) {
 mean sst plots - averaging sst at the hex level and exporting
 ```{r}
 # 1. Define the input and output directories
-input_dir <- "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\"
-output_dir <- "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\sst_trends\\"
+input_dir <- "./copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\"
+output_dir <- "./copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\sst_trends\\"
 
 # Ensure the output directory exists
 if (!dir.exists(output_dir)) {
@@ -459,7 +460,6 @@ e.g.,:
 831e8bfffffffff
 831e12fffffffff
 
-
 Bind all sst data into one rds file having all hexagons and a mean daily sst across the entire hexagon
 ```{r}
 library(dplyr)
@@ -467,8 +467,8 @@ library(readr)
 library(purrr)
 
 # 1. Define the input directory containing all the individual hexagon RDS files
-input_dir <- "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\"
-output_dir <- "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\final_data\\"
+input_dir <- "./copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\"
+output_dir <- "./copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\final_data\\"
 
 # Ensure the output directory exists
 if (!dir.exists(output_dir)) {
@@ -533,8 +533,8 @@ library(tools) # For file_path_sans_ext and basename
 # --- NEW CODE CHUNK: Distinct Cell Count Summary ---
 
 # Define the input and output directories (must match the first script)
-input_dir <- "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\"
-output_dir <- "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\final_data\\"
+input_dir <- "./copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\"
+output_dir <- "./copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m/\\corrected_hex_level_data\\final_data\\"
 
 # Ensure the output directory exists
 if (!dir.exists(output_dir)) {
@@ -586,7 +586,7 @@ message(output_cells_file_path)
 #quality checks
 ##10m SST
 ```{r}
-data_10m=read_rds("copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m/corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds")
+data_10m=read_rds("./copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m/corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds")
 
 overall_start <- min(data_10m$date)
 overall_end <- max(data_10m$date)
@@ -670,7 +670,7 @@ missing_summary_h3_overall <- missing_days_by_h3 %>%
 
 ##SST
 ```{r}
-data_sst_thin=read_rds("copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004\\corrected_hex_level_data/final_data/all_hexagons_daily_summary.rds")
+data_sst_thin=read_rds("./copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004\\corrected_hex_level_data/final_data/all_hexagons_daily_summary.rds")
 
 overall_start <- min(data_sst_thin$date)
 overall_end <- max(data_sst_thin$date)
@@ -751,4 +751,3 @@ missing_summary_h3_overall <- missing_days_by_h3 %>%
   ) %>%
   arrange(desc(total_missing_in_h3))
 ```
-
