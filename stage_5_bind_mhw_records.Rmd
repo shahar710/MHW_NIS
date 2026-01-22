@@ -460,7 +460,7 @@ records_map <- ggplot() +
   ) +
   # Apply a clean theme and labels
   labs(
-    title = "A) NIS records (1987-2023)",
+    title = "A) First hexagon-level records of non-indigenous Red Sea species (1987-2023)",
     x = "Longitude",
     y = "Latitude"
   ) +
