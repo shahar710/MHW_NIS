@@ -17,7 +17,7 @@ library(glmm.hp)
 #Data
 ```{r}
 #data for models
-data_models=read_rds("record_data_for_glmms.rds") %>% 
+data_models=read_rds("./records data/record_data_for_glmms.rds") %>% 
   mutate(time_series_id=paste(h3_id,species))
 #for compatibility with variance partition
 data_models_pre_scaled=data_models %>% 
@@ -68,7 +68,7 @@ test_main=glmmTMB(
 #  scale(median_sst) 5.36 [5.24, 5.48]         2.32      0.19     [0.18, 0.19]
 #  scale(mean_s_sst) 5.44 [5.32, 5.57]         2.33      0.18     [0.18, 0.19]
 
-#write_rds(test_main,"test_main.rds")
+write_rds(test_main,"./glmms/model_1_global/test_main.rds")
 # test_main=read_rds("glmms\\test_main.rds")
 summary(test_main)
 performance::check_singularity(test_main)
@@ -105,7 +105,7 @@ fixed_effects_df <- broom.mixed::tidy(test_main, effects = "fixed",
 #random effects
 random_effects_df <- broom.mixed::tidy(test_main, effects = "ran_pars") 
 
-#write.csv(fixed_effects_df,"fixed_effects_df_binomial.csv",row.names = F)
+write.csv(fixed_effects_df,"./glmms/model_1_global/fixed_effects_df_binomial.csv",row.names = F)
 
 #Binomial model: AIC = 7687.6
 #Betabinomial model: AIC = 7689.6
@@ -141,7 +141,7 @@ R2_partition_results <-glmm.hp(test_main_r_part,
                                 type="R2") # Specify that I want adjusted R2 partitioning
 
 R2_partition_results
-#write_rds(R2_partition_results,"R2_partition_results_test_main.rds")
+write_rds(R2_partition_results,"./glmms/model_1_global/R2_partition_results_test_main.rds")
 
 #Interpretation
 ##Unique - The R2 explained by the predictor alone, i.e., in a model containing only that predictor.
@@ -182,7 +182,7 @@ R2_partition_results_df=R2_partition_results[[2]] %>%
     )
   )
   
-#write.csv(R2_partition_results_df,"R2_partition_results_df_test_main.csv",row.names = F)
+write.csv(R2_partition_results_df,"./glmms/model_1_global/R2_partition_results_df_test_main.csv",row.names = F)
 
 R2_partition_results_df=read.csv("glmms/test_main/R2_partition_results_df_test_main.csv") %>% 
   rename(Variable_p=predictors) %>% 
@@ -230,20 +230,20 @@ test_main_gg_yfr=ggeffects::ggpredict(
   test_main,
   terms=c("first_rec_year [1902:2018 by = 1]"))
 
-#write_rds(test_main_gg_cint,
-       #   "test_main_gg_cint.rds")
-#write_rds(test_main_gg_yr,
-       #   "test_main_gg_yr.rds")
-#write_rds(test_main_gg_sst,
-        #  "test_main_gg_sst.rds")
-#write_rds(test_main_gg_source,
-         # "test_main_gg_source.rds")
-#write_rds(test_main_gg_cpi,
-         # "test_main_gg_cpi.rds")
-#write_rds(test_main_gg_yfr,
-         # "test_main_gg_yfr.rds")
-#write_rds(test_main_gg_s_sst,
-         # "test_main_gg_s_sst.rds")
+write_rds(test_main_gg_cint,
+  "./glmms/model_1_global/test_main_gg_cint.rds")
+write_rds(test_main_gg_yr,
+  "./glmms/model_1_global/test_main_gg_yr.rds")
+write_rds(test_main_gg_sst,
+ "./glmms/model_1_global/test_main_gg_sst.rds")
+write_rds(test_main_gg_source,
+"./glmms/model_1_global/test_main_gg_source.rds")
+write_rds(test_main_gg_cpi,
+"./glmms/model_1_global/test_main_gg_cpi.rds")
+write_rds(test_main_gg_yfr,
+"./glmms/model_1_global/test_main_gg_yfr.rds")
+write_rds(test_main_gg_s_sst,
+"./glmms/model_1_global/test_main_gg_s_sst.rds")
 ```
 
 ####Plot model
@@ -298,231 +298,9 @@ coef_p=ggplot(data=fixed_effects_df_vis)+
        caption = bquote(R[m]^2 == 0.48*","~~R[c]^2 == 0.53))+
   coord_cartesian(xlim=c(-1.7,1.7))
 coef_p
-ggsave(filename ="./plots/coef_p.png" ,plot =coef_p ,device = "jpeg",units = "cm",width = 15,height = 12)
+ggsave(filename ="./glmms/model_1_global/coef_p.png" ,plot =coef_p ,device = "jpeg",units = "cm",width = 15,height = 12)
 ```
 
-#####Predicted
-```{r}
-#c_intensity
-test_main_cint_p=ggplot(data_models)+
-  geom_point(aes(x=annual_c_int,y=records),
-             alpha=0.3,
-             color="grey")+
-  geom_ribbon(data=test_main_gg_cint,
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=test_main_gg_cint,
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="Cumulative intensity (°C-days)",
-       y="Record status",
-       title="C) MHWs")+
-  theme_bw()+
-  theme(axis.title.y = element_blank())
-
-
-#c_intensity zoom
-test_main_cint_p_zoom=ggplot(data_models)+
-  geom_ribbon(data=test_main_gg_cint,
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=test_main_gg_cint,
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="Cumulative intensity (°C-days)",
-       y="Record status")+
-  theme_bw()+
-  theme(axis.title.y = element_blank())+
-coord_cartesian(ylim=c(0,.1))+
-  scale_y_continuous(breaks = seq(0,0.1,by=0.05))
-
-
-#embed cint
-embeded_cint <- test_main_cint_p +
-  annotation_custom(ggplotGrob(test_main_cint_p_zoom),
-                    xmin = 50, xmax = 150,
-                    ymin = 0.1, ymax = 0.9)
-
-
-#years
-test_main_yr_p=ggplot(data_models)+
-  geom_jitter(aes(x=year_of_mhws,y=records),
-             alpha=0.3,
-             color="grey",
-             width = 0.1,
-             height = 0.01)+
-  geom_ribbon(data=test_main_gg_yr,
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#56B52F")+
-  geom_line(data=test_main_gg_yr,
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="Year",
-       y="Record status",
-       title="A) Time")+
-  theme_bw()+
-  theme(axis.title.y = element_blank())
-
-
-#SST
-test_main_sst_p=ggplot(data_models)+
-  geom_point(aes(x=median_sst,y=records),
-             alpha=0.3,
-             color="grey")+
-  geom_ribbon(data=test_main_gg_sst,
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=test_main_gg_sst,
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="SST-temporal (°C)",
-       y="Record status",
-       title="B) SST")+
-  theme_bw()+
-  theme(axis.title.y = element_blank())
-
-#SST zoom
-test_main_sst_p_zoom=ggplot(data_models)+
-  geom_ribbon(data=test_main_gg_sst,
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=test_main_gg_sst,
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="SST-temporal (°C)",
-       y="Record status")+
-  theme_bw()+
-  coord_cartesian(ylim=c(0,.05))+
-  scale_y_continuous(breaks = seq(0,0.05,by=0.025))+
-  theme(axis.title = element_blank(),
-        plot.background = element_rect(fill = "transparent", colour = NA))
-
-#embed sst
-embeded_sst <- test_main_sst_p +
-  annotation_custom(ggplotGrob(test_main_sst_p_zoom),
-                    xmin = 15, xmax = 23,
-                    ymin = 0.1, ymax = 0.9)+
-  theme(axis.title.y = element_blank())
-
-```
-
-```{r}
-test_main_grid=gridExtra::grid.arrange(left="Occurrence probability",
-  test_main_yr_p,
-                        embeded_sst+
-    labs(title="B) SST-temporal"),
-                        test_main_cint_p,
-                        ncol = 2,
-                        nrow=2,
-  layout_matrix = rbind(c(1, 1,1,1), # Row 1: P1 and P2
-                        c(2,2,3,3)))
-
-
-ggsave(filename ="test_main_grid.png" ,plot =test_main_grid ,device = "jpeg",units = "cm",width = 20,height = 15)
-```
-
-Plot non-focal
-```{r}
-#Source
-test_main_source_p=ggplot(data_models)+
-  geom_point(aes(x=sources,y=records),
-             alpha=0.3,
-             color="grey")+
-  geom_ribbon(data=test_main_gg_source,
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=test_main_gg_source,
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="Sources",
-       y="Record status",
-       title="A) Sources")+
-  theme_bw()+
-  theme(axis.title.y = element_blank())
-
-#CPI
-test_main_cpi_p=ggplot(data_models)+
-  geom_point(aes(x=CPI,y=records),
-             alpha=0.3,
-             color="grey")+
-  geom_ribbon(data=test_main_gg_cpi,
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=test_main_gg_cpi,
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="CPI (m/s)",
-       y="Probability of record occurrence",
-       title="B) Current Propagation Index")+
-  theme_bw()+
-  theme(axis.title.y = element_blank())
-test_main_cpi_p
-
-#Year of first record
-test_main_yfr_p=ggplot(data_models)+
-  geom_point(aes(x=first_rec_year,y=records),
-             alpha=0.3,
-             color="grey")+
-  geom_ribbon(data=test_main_gg_yfr,
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=test_main_gg_yfr,
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="Year of first record",
-       y="Probability of record occurrence",
-       title="C) Year of first record")+
-  theme_bw()+
-  theme(axis.title.y = element_blank())+
-    scale_x_continuous(breaks = seq(1902,2020,by=20))
-test_main_yfr_p
-
-#YFR zoom
-test_main_yfr_p_zoom=ggplot(data_models)+
-  geom_ribbon(data=test_main_gg_yfr,
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=test_main_gg_yfr,
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  theme_bw()+
-  coord_cartesian(ylim=c(0,.08))+
-  scale_y_continuous(breaks = seq(0,0.08,by=0.04))+
-  scale_x_continuous(breaks = seq(1902,2020,by=20))+
-  theme(axis.title = element_blank(),
-        plot.background = element_rect(fill = "transparent", colour = NA))
-
-#embed yfr
-embeded_yfr <- test_main_yfr_p +
-  annotation_custom(ggplotGrob(test_main_yfr_p_zoom),
-                    xmin = 1920, xmax = 1990,
-                    ymin = 0.1, ymax = 0.9)+
-  theme(axis.title.y = element_blank())
-```
-
-Non climatic panel
-```{r}
-test_main_grid_nc=gridExtra::grid.arrange(
-  left="Probability of record occurrence",
-  test_main_source_p,
-  test_main_cpi_p,
-  embeded_yfr,
-  layout_matrix = rbind(c(1), # Row 1: P1 and P2
-                        c(2),
-                        c(3)))
-
-
-ggsave(filename ="test_main_grid_nc.png" ,plot =test_main_grid_nc ,device = "jpeg",units = "cm",width = 15,height = 20)
-```
 ##1.3) GLMM with sst rates
 ```{r}
 test_main_with_rates=glmmTMB(
