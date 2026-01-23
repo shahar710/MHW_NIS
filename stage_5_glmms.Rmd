@@ -122,7 +122,7 @@ write.csv(fixed_effects_df,"./glmms/model_1_global/fixed_effects_df_binomial.csv
 ## it into the individual contribution of each fixed effect predictor using
 ## hierarchical partitioning (average shared variance method).
 #model
-test_main_r_part=glmmTMB(
+test_main_r_part=lme4::glmer(
   data = data_models_pre_scaled,
   formula = records~
     first_rec_year_sc+
@@ -184,7 +184,7 @@ R2_partition_results_df=R2_partition_results[[2]] %>%
   
 write.csv(R2_partition_results_df,"./glmms/model_1_global/R2_partition_results_df_test_main.csv",row.names = F)
 
-R2_partition_results_df=read.csv("glmms/test_main/R2_partition_results_df_test_main.csv") %>% 
+R2_partition_results_df=read.csv("./glmms/model_1_global/R2_partition_results_df_test_main.csv") %>% 
   rename(Variable_p=predictors) %>% 
   mutate(Variable_p=case_when(
     Variable_p%in%"Year of first record"~"Year of first record",
