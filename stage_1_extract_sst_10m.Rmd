@@ -1,12 +1,12 @@
 ---
-title: "stage_2_extract_sst"
+title: "stage_1_extract_sst"
 author: "Shahar Chaikin"
-date: "2025-09-12"
+date: "2025-23-01"
 output: html_document
 ---
 In this code we will extract SST data based on the hexagons that represent the records data. Data will be extracted directly form the "MEDSEA_MULTIYEAR_PHY_006_004" of the Copernicus Marine Service.
 
-libraries
+#Libraries
 Install latest developmental version from R-Universe:
 ```{r eval=FALSE, include=FALSE}
 install.packages("CopernicusMarine", repos = c('https://pepijn-devries.r-universe.dev', 'https://cloud.r-project.org'))
@@ -18,67 +18,15 @@ library(tidyverse)
 library(stars) # To handle spatiotemporal raster data
 ```
 
+#Backbone data
 Hexagons to be used for downloading climatic data
 ```{r}
-  hex=read.csv("./records data/cleaned/records_cleaned_harm_8_10_25.csv") %>% 
+  hex=read.csv("./records data/records_cleaned_harm_23_01_26.csv") %>% 
   select(h3_id) %>% 
   distinct()
-hex_medits=read.csv("h3_medits2.csv") %>% 
-  select(h3_id=2)
-
-setdiff(hex_medits,hex)
-
-hex_records_medits=bind_rows(hex,hex_medits) %>% distinct()
 ```
 
-Download a subset
-```{r eval=FALSE, include=FALSE}
-
-cms_products_list() %>% view
-MMP64_details=cms_product_details(product = "MEDSEA_MULTIYEAR_PHY_006_004")
-MMP64_details$properties
-MMP64_details$description
-MMP64_details$properties$mainVariables
-
-med_test <-
-  cms_download_subset(username = "schaikin",
-                      password = "Aa123456",
-    product       = "MEDSEA_MULTIYEAR_PHY_006_004",
-    layer         = "med-cmcc-tem-rean-d",
-    variable      = c("thetao"),
-    region        = c(30, 32, 31, 33),
-    timerange     = c("1987-01-01 UTC", "2024-12-31 UTC"),
-    verticalrange = c(-10.6,-1.001),
-    progress      = T
-)
-med_test
-med_test$thetao
-med_test %>% str
-med_test_df=as_tibble(med_test)
-#How many dial temp data I have per month?
-test_dial_data=med_test_df %>% 
-     # Unite the 'lat' and 'long' columns into a new column named 'cell_id'
-     unite(
-         col = "cell_id",
-         latitude,
-         longitude,
-         sep = "_",
-         remove = FALSE) %>% 
-  mutate(month=lubridate::month(time),
-         year=lubridate::year(time)) %>% 
-  drop_na() %>% 
-      group_by(year,month,latitude,longitude) %>% 
-      summarise(n=n(),
-              n_na = sum(is.na(as.numeric(thetao))),
-              mean_sst=mean(thetao, na.rm = TRUE),
-              median_sst=median(thetao, na.rm = TRUE))
-#Sum cells do not have data at all but partially missing cells have missing 6-1 days and not more.
-#plot
-plot(med_test["thetao"], col = hcl.colors(100), axes = TRUE)
-```
-
-Repeat
-information
+#Download information
 ```{r}
 USERNAME <- "schaikin" 
 PASSWORD <- "Aa123456" 
@@ -91,8 +39,8 @@ TIMERANGE <- c("1987-01-01 UTC", "2024-12-31 UTC")
 # Vertical range for SST data is typically at or near the surface.
 # A range like 0 to -1 meter is a safe bet for SST.
 VERTICALRANGE <- c(-10.6,-1.001)
-# H3 hexagons from your dataframe
-h3_ids <- hex_records_medits$h3_id %>% unique()
+# H3 hexagons from  dataframe
+h3_ids <- hex$h3_id %>% unique()
 ```
 
 Output dir.
@@ -185,7 +133,7 @@ download_and_save_hexagon <- function(h3_id) {
 #process hexagons in chunks
 ```{r}
 # Split the list of hexagons into chunks to manage downloads
-chunk_size <- 1 # Adust this value based on your RAM and internet speed
+chunk_size <- 1 # Adust this value based on  RAM and internet speed
 h3_chunks <- split(h3_ids, ceiling(seq_along(h3_ids) / chunk_size))
 
 # Loop through each chunk and process the hexagons
@@ -194,7 +142,7 @@ for (chunk in h3_chunks) {
 }
 ```
 
-Clean coords outside the hex borders
+Crop data exactly to the hexagons borders
 Loop it
 ```{r}
 # 1. Define the input and output directories
@@ -274,7 +222,7 @@ test=read_rds("copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m/831e9
          lat,
          long,
          sep = "_",
-         remove = FALSE  # Set to TRUE if you want to remove the original lat/long columns
+         remove = FALSE  # Set to TRUE if want to remove the original lat/long columns
      ) %>% 
   mutate(month=lubridate::month(date),
          year=lubridate::year(date))
@@ -306,10 +254,11 @@ if (length(unprocessed_files) > 0) {
   cat("All files were processed successfully.\n")
 }
 #The following files were not processed:
-#[1] "831ec8fffffffff" "831ec9fffffffff" "832d05fffffffff"
-# These are the black and Marmara Sea
+#[1] "831ec9fffffffff" "832d05fffffffff"
+# These are the black and Marmara Sea which are outside the scope of this work
 ```
 
+#Visuals
 Plot data and trends by hexagons
 h3 with geom_hex
 ```{r}
@@ -411,7 +360,7 @@ if (nrow(data) == 0) {
 
 # Ensure the date column is in the correct format using lubridate
 # It is assumed the date column is named 'date' and is in YYYY-MM-DD format.
-# Adjust the function (e.g., dmy, mdy) if your date format is different.
+# Adjust the function (e.g., dmy, mdy) if  date format is different.
 data <- data %>%
   mutate(date = lubridate::ymd(date))
 
@@ -423,12 +372,13 @@ mean_sst_df <- data %>%
 
   # e. Create the ggplot object for the trend plot
   p <- ggplot(data = mean_sst_df, aes(x = date, y = mean_sst_spatial)) +
-    geom_point(alpha = 0.5) + # Add points with some transparency
+    geom_line(alpha = 0.5) + # Add points with some transparency
+    geom_smooth(method = "lm",formula = y~x,color="black")+
     scale_x_date(date_breaks = "4 years", date_labels = "%Y") + # Set x-axis breaks to 4-year intervals
     labs(
-      title = paste("SST Trend for H3 Hexagon:", hex_name),
+      title = paste("SST Trend for Hexagon:", hex_name),
       x = "Date",
-      y = "Mean Sea Surface Temperature (°C)"
+      y = "Mean SST (°C)"
     ) +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x-axis labels for readability
@@ -441,10 +391,9 @@ mean_sst_df <- data %>%
   ggsave(
     filename = output_file_path,
     plot = p,
-    width = 9,
-    height = 6,
-    units = "in",
-    dpi = 300
+    width = 15,
+    height = 8,
+    units = "cm"
   )
 
   message(paste("Saved SST trend plot for", hex_name, "to", output_file_path))
@@ -453,13 +402,7 @@ mean_sst_df <- data %>%
 message("All SST trend plots have been generated and saved.")
 ```
 
-Conclusions
-Some regions should be reconsidered as the hexagons border with two sub seas.
-e.g.,:
-831e8afffffffff
-831e8bfffffffff
-831e12fffffffff
-
+#Core output
 Bind all sst data into one rds file having all hexagons and a mean daily sst across the entire hexagon
 ```{r}
 library(dplyr)
@@ -583,8 +526,7 @@ message("\nDistinct cell count data for all hexagons has been successfully calcu
 message(output_cells_file_path)
 ```
 
-#quality checks
-##10m SST
+#Quality checks
 ```{r}
 data_10m=read_rds("./copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m/corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds")
 
@@ -607,6 +549,7 @@ range_by_h3 <- range_by_h3 %>%
     is_complete = n_days_recorded == expected_days,
     missing_days = expected_days - n_days_recorded)
 ```
+
 1. Prepare Data and Identify Full Date Range
 ```{r}
 # 2. Get a list of all unique h3_ids
@@ -633,121 +576,4 @@ missing_days_by_h3 <- missing_data_diagnosis %>%
   filter(is.na(mean_sst_10m)) %>% # Filter where the SST data is missing
   select(date, h3_id) %>%
   mutate(year = lubridate::year(date)) # Use lubridate::year() to extract the year
-```
-
-3.1 Summarize Missing Days Across Years and Hexagons
-```{r}
-missing_summary_year_h3 <- missing_days_by_h3 %>%
-  group_by(h3_id, year) %>%
-  summarise(
-    count_missing = n(),
-    .groups = 'drop'
-  ) %>%
-  arrange(desc(count_missing))
-```
-
-3.2 Summarize Missing Days Per Year (Overall)
-```{r}
-missing_summary_year_overall <- missing_days_by_h3 %>%
-  group_by(year) %>%
-  summarise(
-    total_missing_in_year = n(),
-    .groups = 'drop'
-  ) %>%
-  arrange(desc(total_missing_in_year))
-```
-
-3.3 Summarize Missing Days Per Hexagon (Overall)
-```{r}
-missing_summary_h3_overall <- missing_days_by_h3 %>%
-  group_by(h3_id) %>%
-  summarise(
-    total_missing_in_h3 = n(),
-    .groups = 'drop'
-  ) %>%
-  arrange(desc(total_missing_in_h3))
-```
-
-##SST
-```{r}
-data_sst_thin=read_rds("./copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004\\corrected_hex_level_data/final_data/all_hexagons_daily_summary.rds")
-
-overall_start <- min(data_sst_thin$date)
-overall_end <- max(data_sst_thin$date)
-
-#1.1 Identify Start and End Dates
-# Find the start and end dates for each spatial unit (h3_id)
-range_by_h3_thin <- data_sst_thin %>%
-  group_by(h3_id) %>%
-  summarise(
-    start_date = min(date),
-    end_date = max(date),
-    n_days_recorded = n_distinct(date))
-
-#1.2 Calculate Expected Number of Days
-range_by_h3_thin <- range_by_h3_thin %>%
-  mutate(
-    expected_days = as.integer(end_date - start_date) + 1,
-    is_complete = n_days_recorded == expected_days,
-    missing_days = expected_days - n_days_recorded)
-```
-1. Prepare Data and Identify Full Date Range
-```{r}
-# 2. Get a list of all unique h3_ids
-all_h3_ids <- unique(data_sst_thin$h3_id)
-
-# 3. Create a complete sequence of dates for the entire period
-full_date_sequence <- seq(overall_start, overall_end, by = "day")
-```
-
-2. Generate Complete Grid and Identify Missing Entries
-```{r}
-# 1. Create a data frame with all expected combinations of date and h3_id
-expected_grid_thin <- expand_grid(
-  date = full_date_sequence,
-  h3_id = all_h3_ids
-)
-
-# 2. Join the actual data onto the expected grid
-missing_data_diagnosis_thin <- expected_grid %>%
-  left_join(data_sst_thin, by = c("date", "h3_id"))
-
-# 3. Filter to find the missing entries and add year using lubridate::year()
-missing_days_by_h3_thin <- missing_data_diagnosis_thin %>%
-  filter(is.na(mean_sst)) %>% # Filter where the SST data is missing
-  select(date, h3_id) %>%
-  mutate(year = lubridate::year(date)) # Use lubridate::year() to extract the year
-```
-
-3.1 Summarize Missing Days Across Years and Hexagons
-```{r}
-missing_summary_year_h3_thin <- missing_days_by_h3_thin %>%
-  group_by(h3_id, year) %>%
-  summarise(
-    count_missing = n(),
-    .groups = 'drop'
-  ) %>%
-  arrange(desc(count_missing))
-```
-
-3.2 Summarize Missing Days Per Year (Overall)
-```{r}
-missing_summary_year_overall_thin <- missing_days_by_h3_thin %>%
-  group_by(year) %>%
-  summarise(
-    total_missing_in_year = n(),
-    .groups = 'drop'
-  ) %>%
-  arrange(desc(total_missing_in_year))
-```
-
-3.3 Summarize Missing Days Per Hexagon (Overall)
-```{r}
-missing_summary_h3_overall <- missing_days_by_h3 %>%
-  group_by(h3_id) %>%
-  summarise(
-    total_missing_in_h3 = n(),
-    .groups = 'drop'
-  ) %>%
-  arrange(desc(total_missing_in_h3))
 ```
