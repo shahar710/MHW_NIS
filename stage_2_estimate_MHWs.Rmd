@@ -29,20 +29,6 @@ time_series_length <- sst_data %>%
 ##1.1) noraml climatologies
 ###1.1.1) Estimate Climatologies
 ```{r}
-test_climatology = heatwaveR::ts2clm(
-  data = sst_data %>% 
-    filter(h3_id %in% "831e83fffffffff"),
-  x = date,
-  y = median_sst_10m,
-  c("1987-01-01", "2023-05-31"),
-  windowHalfWidth = 15,
-  pctile = 95,
-  smoothPercentile = T,
-  clmOnly = F,
-  var = F,
-  roundClm = 4) %>% 
-  mutate(hexagon="831e83fffffffff")
-
 h3_vector=sst_data$h3_id %>% unique
 
 #Estimate climatologies for all hexagons using for loop
@@ -75,7 +61,7 @@ for (i in h3_vector) {
 
 ts2clm_df=bind_rows(ts2clm_list)
 ts2clm_df$h3_id %>% unique %>% length
-write_rds(ts2clm_df,"ts2clm_df_median_sst_10m.rds")
+write_rds(ts2clm_df,"./climatology_mhws/ts2clm_df_median_sst_10m.rds")
 ```
 
 ###1.1.2) Estimate MHWs for all hexagons
@@ -112,8 +98,8 @@ event_df <- bind_rows(event_list, .id = "h3_id")
 
 Write detect_event output
 ```{r eval=FALSE, include=FALSE}
-write_rds(climatology_df,"climatology_df_median_sst_10m.rds")
-write_rds(event_df,"event_df_median_sst_10m.rds")
+write_rds(climatology_df,"./climatology_mhws/climatology_df_median_sst_10m_2.rds")
+write_rds(event_df,"./climatology_mhws/event_df_median_sst_10m_2.rds")
 ```
 
 Interannual MHWs summary
@@ -127,7 +113,7 @@ event_df_annual=climatology_df %>%
             intensity_cumulative=sum(median_sst_10m-seas)) %>% 
   drop_na()
 
-#write_rds(event_df_annual,"event_df_annual_10m.rds")
+write_rds(event_df_annual,"./climatology_mhws/event_df_annual_10m_2.rds")
 ```
 
 Plot all MHWs
@@ -223,39 +209,11 @@ for (i in h3_vector) {
   # Save the plot with filename as the hexagon name
   ggsave(paste0(i, ".png"),
          plot,
-         path = "C:\\Users\\User\\Desktop\\research\\Mentoring and colaborations\\Georgous\\MHW_NIS\\copernicus_data_by_hexagon\\MEDSEA_MULTIYEAR_PHY_006_004_10m\\corrected_hex_level_data\\mhw_plots\\median/",device = "jpeg",width = 35,height = 15,units = "cm")
+         path = "./mhw_plots/",device = "jpeg",width = 35,height = 15,units = "cm")
 }
 ```
 
 ###1.2) detrended MHWs
-Test
-```{r eval=FALSE, include=FALSE}
-test=sst_data %>% 
-         filter(h3_id%in%"831e12fffffffff")
-
-test_lm=lm(data=test,formula = median_sst_10m~date)
-
-detrend_data=bind_cols(test$date,
-                       test$median_sst_10m,
-                       test_lm$fitted.values,
-                       test_lm_res=test_lm$residuals) %>% 
-  rename(date=1,
-         obs=2,
-         fitted=3,
-         residuals=4)
-#observed data
-ggplot() + 
-  geom_point(data=test,
-             aes(x=date,y=median_sst_10m))+
-  geom_line(data=detrend_data,
-            aes(x=date,y=fitted))
-#plot detrended data
-ggplot() + 
-  geom_point(data=detrend_data,
-             aes(x=date,y=residuals))
-```
-
-Applay to all
 ```{r}
 # Get unique hexagon IDs
 hexagons <- unique(sst_data$h3_id)
@@ -295,20 +253,6 @@ sst_data_detrended <- bind_rows(sst_data_detrended_list)
 
 ###1.2.2) Estimate Climatologies
 ```{r}
-test_climatology_dt = heatwaveR::ts2clm(
-  data = sst_data_detrended %>% 
-    filter(h3_id %in% "830004fffffffff"),
-  x = date,
-  y = residuals,
-  c("1993-01-01", "2021-06-30"),
-  windowHalfWidth = 5,
-  pctile = 95,
-  smoothPercentile = T,
-  clmOnly = F,
-  var = F,
-  roundClm = 4) %>% 
-  mutate(hexagon="830004fffffffff")
-
 h3_vector=sst_data_detrended$h3_id %>% unique
 
 #Estimate climatologies for all hexagons using for loop
@@ -341,7 +285,7 @@ for (i in h3_vector) {
 
 ts2clm_det_df=bind_rows(ts2clm_det_list)
 ts2clm_det_df$h3_id %>% unique %>% length
-write_rds(ts2clm_det_df,"ts2clm_dt_df_median_sst_10m.rds")
+write_rds(ts2clm_det_df,"./climatology_mhws/ts2clm_dt_df_median_sst_10m.rds")
 ```
 
 ###1.2.3) Estimate MHWs for all hexagons
@@ -378,6 +322,6 @@ event_dt_df <- bind_rows(event_dt_list, .id = "h3_id")
 
 Write detect_event output
 ```{r eval=FALSE, include=FALSE}
-write_rds(climatology_dt_df,"climatology_dt_df.rds")
-write_rds(event_dt_df,"event_dt_df.rds")
+write_rds(climatology_dt_df,"./climatology_mhws/climatology_dt_df_2.rds")
+write_rds(event_dt_df,"./climatology_mhws/event_dt_df_2.rds")
 ```

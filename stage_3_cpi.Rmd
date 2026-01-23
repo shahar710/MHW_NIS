@@ -5,7 +5,7 @@ date: "2025-10-10"
 output: html_document
 ---
 
-In this code we will extract surface current velocity and dirction data from the Copernicus Marine Service. This data will be used to develop an index quntifying current alignment and propagation across hexagons (i.e., CPI).
+In this code we will extract surface current velocity and direction data from the Copernicus Marine Service. This data will be used to develop an index quantifying current alignment and propagation across hexagons (i.e., CPI).
 
 libraries
 ```{r}
@@ -24,7 +24,7 @@ vo =northward sea water velocity (m/s)
 
 ```{r}
 currents=stars::read_ncdf(
-  "copernicus_data_by_hexagon/currents/cmems_mod_med_phy-cur_my_4.2km_P1Y-m_1760095046500.nc") %>% 
+  "./copernicus_data_by_hexagon/currents/cmems_mod_med_phy-cur_my_4.2km_P1Y-m_1760095046500.nc") %>% 
   as_tibble() %>% 
   drop_na %>% 
   mutate(h3_id=h3jsr::point_to_cell(
@@ -175,7 +175,7 @@ e_n_maps=gridExtra::grid.arrange(
                         c(2)))
 
 e_n_maps
-#ggsave(filename ="./plots/e_n_maps_all.png" ,plot =e_n_maps ,device = "jpeg",units = "cm",width = 20,height = 20)
+ggsave(filename ="./copernicus_data_by_hexagon/currents/plots/e_n_maps_all.png" ,plot =e_n_maps ,device = "jpeg",units = "cm",width = 20,height = 20)
 ```
 
 #1) DCI - Directional Current Index (DCI)
@@ -282,7 +282,7 @@ dci_data_step_3 <- dci_data %>%
   ) %>%
   ungroup()
 
-#write.csv(dci_data_step_3,"dci_index.csv",row.names = F)
+write.csv(dci_data_step_3,"./copernicus_data_by_hexagon/currents/dci_index.csv",row.names = F)
 ```
 
 Explanation paragraph:
@@ -356,11 +356,11 @@ panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
     panel.background = element_rect(fill = "skyblue", color = NA) 
   )
 dci_p_map
-#ggsave(filename ="./plots/dci_p_map_all.png" ,plot =dci_p_map ,device = "jpeg",units = "cm",width = 20,height = 12)
+ggsave(filename ="./copernicus_data_by_hexagon/currents/plots/dci_p_map_all.png" ,plot =dci_p_map ,device = "jpeg",units = "cm",width = 20,height = 12)
 ```
 
 #2) Current Propagation Index (CPI)
-This index gives more weight for the propgation effect. Hexagons aligned with nearby hexagons are taken into account.
+This index gives more weight for the propagation effect. Hexagons aligned with nearby hexagons are taken into account.
 
 ## Step 1: Simplified hexagon distance calculation
 ```{r}
@@ -370,7 +370,7 @@ SOURCE_LAT <- 31.332367
 SOURCE_LON <- 32.385074 
 
 calculate_hexagon_distance_simple <- function(target_h3, source_h3) {
-  max_rings <- 100  # Adjust based on your study area size
+  max_rings <- 100  # Adjust based on study area size
   
   for (k in 1:max_rings) {
     # Use get_disk from h3jsr - this is the correct function
@@ -494,15 +494,11 @@ direction_map <- ggplot() +
     panel.background = element_rect(fill = "lightblue")
   )
 
-print(direction_map)
-# ggsave(filename ="./plots/direction_map_all.png" ,plot =direction_map ,device = "jpeg",units = "cm",width = 20,height = 12)
-
-#Somthing is unintuitive in North Africa, the direction is Westward and not eastward
+ggsave(filename ="./copernicus_data_by_hexagon/currents/plots/direction_map_all.png" ,plot =direction_map ,device = "jpeg",units = "cm",width = 20,height = 12)
 ```
 
 ##step 2: Calculate B parameter
 ```{r}
-
 # Calculate Component B with current propagation from Suez Canal
 calculate_component_B_propagation <- function(all_hex_data) {
   
@@ -664,7 +660,7 @@ legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
     panel.background = element_rect(fill = "skyblue", color = NA))
 
-#ggsave(filename =".plots/component_B_propagation_map_all.png" ,plot =component_B_propagation_map ,device = "jpeg",units = "cm",width = 20,height = 12)
+ggsave(filename ="./copernicus_data_by_hexagon/currents/component_B_propagation_map_all.png" ,plot =component_B_propagation_map ,device = "jpeg",units = "cm",width = 20,height = 12)
 ```
 
 ##step 3: Calculate C (Decay parameter) and synthesis of CPI
@@ -761,9 +757,9 @@ legend.key.size = unit(0.25, "cm"),
 panel.grid.major = element_line(color = "skyblue", linewidth = 0.2),
     panel.background = element_rect(fill = "skyblue", color = NA))
 
-#ggsave(filename ="./plots/component_B_propagation_map_dd_all.png" ,plot =cpi_map ,device = "jpeg",units = "cm",width = 20,height = 12)
+ggsave(filename ="./copernicus_data_by_hexagon/currents/plots/component_B_propagation_map_dd_all.png" ,plot =cpi_map ,device = "jpeg",units = "cm",width = 20,height = 12)
 
-#write.csv(cpi_data_with_C,"cpi_data_with_C_all.csv",row.names = F)
+write.csv(cpi_data_with_C,"./copernicus_data_by_hexagon/currents/cpi_data_with_C_all.csv",row.names = F)
 
 # Show relationship between components
 cat("\n=== COMPONENT RELATIONSHIPS ===\n")

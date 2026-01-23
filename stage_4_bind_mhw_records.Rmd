@@ -15,11 +15,11 @@ library(tidyverse)
 #data
 ```{r}
 #detrended
-clim_dt=read_rds("./climatology_mhws/climatology_dt_df.rds")
-events_dt=read_rds("./climatology_mhws/event_dt_df.rds")
+clim_dt=read_rds("./climatology_mhws/climatology_dt_df_2.rds")
+events_dt=read_rds("./climatology_mhws/event_dt_df_2.rds")
 
 #Records
-records=read_csv("./records data/cleaned/records_cleaned_harm_8_10_25.csv") %>% 
+records=read_csv("./records data/records_cleaned_harm_23_01_26.csv") %>% 
   #remove marmara and black sea records that are not in the climatic model
   filter(!h3_id%in%c("831ec8fffffffff", "831ec9fffffffff", "832d05fffffffff"))
 ```
@@ -80,7 +80,7 @@ annual_c_int_dt=clim_dt %>%
   summarise(annual_c_int=sum(intensity)) %>% 
   mutate(year_of_records=year_of_mhws+1)
 
-#write_rds(annual_c_int_dt,"annual_c_int_dt.rds")
+#write_rds(annual_c_int_dt,"./climatology_mhws/annual_c_int_dt.rds")
 ```
 
 #3) Bind dt. MHWs and records
@@ -175,7 +175,7 @@ annual_sst=read_rds(
 
 #Estimate the linear slopes of warming trends
 annual_sst_lm_slopes=read_rds(
-  "copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m//corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds") %>%
+  "./copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m//corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds") %>%
   mutate(h3_id = str_remove(h3_id, "_cleaned"),
          year_of_mhws=lubridate::year(date)) %>% 
   group_by(h3_id) %>%
@@ -195,7 +195,8 @@ annual_sst_lm_slopes=read_rds(
          se = std.error,
          p_value = p.value)
 
-#write.csv(annual_sst_lm_slopes,"./annual_sst_rates.csv",row.names = F)
+#write.csv(annual_sst_lm_slopes,"./copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m//corrected_hex_level_data/final_data/annual_sst_rates.csv",row.names = F)
+
 #Estimate spatial stats across years to differentiate warming trends from the natural longitudinal thermal gradient in the Med.
 sptaial_sst=read_rds(
   "./copernicus_data_by_hexagon/MEDSEA_MULTIYEAR_PHY_006_004_10m//corrected_hex_level_data/final_data/all_hexagons_daily_summary_10m.rds") %>%
@@ -273,7 +274,7 @@ filtered_data_before_first_record_dt_sst_meff=
                            TRUE~sources))
 ```
 
-Optional to add the predicted oremf sources within the data points after 2020 - however colinearity issues arise when using this.
+Add (optional) the predicted oremf sources within the data points after 2020 - however colinearity issues arise when using this.
 ```{r}
 library(glmmTMB)
 #####################################
@@ -309,7 +310,7 @@ filtered_data_before_first_record_dt_sst_meff=filtered_data_before_first_record_
 ##4.3) Add year of first record
 Species level variable
 ```{r}
-year_of_f_rec=read.csv("./records data/cleaned/records_cleaned_harm_8_10_25.csv") %>% 
+year_of_f_rec=read.csv("./records data/records_cleaned_harm_23_01_26.csv") %>% 
   group_by(species) %>% 
   summarise(first_rec_year=min(year))
 
@@ -320,7 +321,7 @@ filtered_data_before_first_record_dt_sst_meff_yfr=filtered_data_before_first_rec
   ungroup()
 ```
 
-##4.4) CPI
+##4.4) Add CPI
 ```{r}
 filtered_data_before_first_record_dt_sst_meff_yfr_cpi=
   filtered_data_before_first_record_dt_sst_meff_yfr %>% 
@@ -362,33 +363,32 @@ filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned %>%
 Save the data to be used for GLMMs
 ```{r}
 # write_rds(filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned,
-#           "record_data_for_glmms.rds")
+#            "./records data/record_data_for_glmms.rds")
 ```
 
 #6) Plots
 ##6.1) records - points
 ```{r}
-# Assuming your dataframe is named 'records'
 # Ensure 'lat' and 'long' columns exist in 'records'
 
 # 1. Get world map data
 world_map <- rnaturalearth::ne_countries(scale = "large", returnclass = "sf")
 
-# 2. Convert your 'records' data frame to an sf object
+# 2. Convert  'records' data frame to an sf object
 records_sf <- records_min %>%
   drop_na(lat, long) %>% # Remove rows with missing lat/long
   sf::st_as_sf(coords = c("long", "lat"), crs = 4326) # CRS 4326 is WGS84 for lat/long
 
-# 3. Calculate the extent of your coordinates
+# 3. Calculate the extent of coordinates
 bbox <- sf::st_bbox(records_sf)
 
 # 4. Create the ggplot
 rec_thinned_map=ggplot() +
   # Add the world map
   geom_sf(data = world_map, fill = "antiquewhite", color = "black", linewidth = 0.1) +
-  # Add your data points
+  # Add data points
   geom_sf(data = records_sf, size = 1, alpha = 0.7) +
-  # Crop the map to the extent of your points
+  # Crop the map to the extent of points
   coord_sf(
     xlim = c(bbox["xmin"] - 1, bbox["xmax"] + 1), # Adjust buffer as needed
     ylim = c(bbox["ymin"] - 1, bbox["ymax"] + 1), # Adjust buffer as needed
@@ -436,7 +436,7 @@ world <-rnaturalearth:: ne_countries(scale = "large", returnclass = "sf")
 
 # 4. Create the ggplot map
 records_map <- ggplot() +
-    # Plot the H3 Hexagons (your data)
+    # Plot the H3 Hexagons (data)
   geom_sf(
     data = used_records_sf,
     # Fills the hexagons based on the 'sources' count
@@ -575,7 +575,7 @@ c_int_time_p
 region_annots <- data.frame(
   label = c("West Med.", "Central Med.", "East Med."),
   x     = c(3.25, 18.5, 30.5),      # Approximate visual centers of the basins
-  y     = c(190, 190, 190)   # Set this to the top of your Y-axis
+  y     = c(190, 190, 190)   # Set this to the top of Y-axis
 )
 
 c_int_time_p2=ggplot(c_int_time)+
@@ -662,7 +662,7 @@ intro_grid=gridExtra::grid.arrange(
                         c(2,2,2,3,3,3),
                         c(2,2,2,3,3,3)))
 
-ggsave(filename ="./plots/intro_grid2.png" ,plot =intro_grid ,device = "jpeg",units = "cm",width = 20,height = 20)
+ggsave(filename ="./plots/intro_grid2_23_01_26.png" ,plot =intro_grid ,device = "jpeg",units = "cm",width = 20,height = 20)
 ```
 
 ##6.6.1) SST slopes
@@ -684,7 +684,7 @@ world <-rnaturalearth:: ne_countries(scale = "large", returnclass = "sf")
 
 # 4. Create the ggplot map
 sst_slope_map <- ggplot() +
-    # Plot the H3 Hexagons (your data)
+    # Plot the H3 Hexagons (data)
   geom_sf(
     data = sptaial_sst_slope_sf,
     # Fills the hexagons based on the 'sources' count
@@ -730,7 +730,6 @@ panel.grid.major = element_line(color = "#DBDBDC", linewidth = 0.2),
 sst_slope_map
 ```
 
-
 ##6.6.2) spatial SST
 ```{r}
 
@@ -752,7 +751,7 @@ world <-rnaturalearth:: ne_countries(scale = "large", returnclass = "sf")
 
 # 4. Create the ggplot map
 sst_map <- ggplot() +
-    # Plot the H3 Hexagons (your data)
+    # Plot the H3 Hexagons (data)
   geom_sf(
     data = sptaial_sst_sf,
     # Fills the hexagons based on the 'sources' count
@@ -822,7 +821,7 @@ world <-rnaturalearth:: ne_countries(scale = "large", returnclass = "sf")
 
 # 4. Create the ggplot map
 max_c_int_map <- ggplot() +
-    # Plot the H3 Hexagons (your data)
+    # Plot the H3 Hexagons (data)
   geom_sf(
     data = spatial_c_int_dt_sf,
     # Fills the hexagons based on the 'sources' count
@@ -901,7 +900,6 @@ source_temp=ggplot(filtered_data_before_first_record_dt_sst_meff_yfr_cpi_cleaned
             color="purple")+
   theme_bw()+
   labs(x="Year",y="Sources",title="B) Temporal trend")
-
 ```
 
 ##6.9) proxy to monitoring effort
@@ -923,7 +921,7 @@ world <-rnaturalearth:: ne_countries(scale = "large", returnclass = "sf")
 
 # 4. Create the ggplot map
 h3_map <- ggplot() +
-    # Plot the H3 Hexagons (your data)
+    # Plot the H3 Hexagons (data)
   geom_sf(
     data = ormef_sf,
     # Fills the hexagons based on the 'sources' count
@@ -1001,7 +999,7 @@ world <-rnaturalearth:: ne_countries(scale = "large", returnclass = "sf")
 
 # 4. Create the ggplot map
 cpi_map <- ggplot() +
-    # Plot the H3 Hexagons (your data)
+    # Plot the H3 Hexagons (data)
   geom_sf(
     data = ormef_sf,
     # Fills the hexagons based on the 'sources' count
