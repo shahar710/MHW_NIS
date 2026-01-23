@@ -196,56 +196,6 @@ R2_partition_results_df=read.csv("glmms/test_main/R2_partition_results_df_test_m
     Variable_p%in%"SST - spatial"~"SST (climate)"))
 ```
 
-Extract predictions
-```{r}
-test_main_gg_cint=ggeffects::ggpredict(
-  test_main,
-  terms=c("annual_c_int [0:183 by =1]"))
-
-test_main_gg_yr=ggeffects::ggpredict(
-  test_main,
-  terms=c("year_of_mhws [1987:2020 by =1]"))
-
-test_main_gg_sst=ggeffects::ggpredict(
-  test_main,
-  terms=c("median_sst [14:24 by = 0.5]"))
-
-test_main_gg_s_sst=ggeffects::ggpredict(
-  test_main,
-  terms=c("long_max_s_sst [22.4:29.7 by = 0.5]"))
-
-test_main_gg_source=ggeffects::ggpredict(
-  test_main,
-  terms=c("sources [0:6 by = 0.1]"))
-
-# test_main_gg_source=ggeffects::ggpredict(
-#   test_main,
-#   terms=c("sources_pred [0.1:2 by = 0.01]"))
-
-test_main_gg_cpi=ggeffects::ggpredict(
-  test_main,
-  terms=c("CPI [-0.03:0.06 by = 0.001]"))
-
-test_main_gg_yfr=ggeffects::ggpredict(
-  test_main,
-  terms=c("first_rec_year [1902:2018 by = 1]"))
-
-write_rds(test_main_gg_cint,
-  "./glmms/model_1_global/test_main_gg_cint.rds")
-write_rds(test_main_gg_yr,
-  "./glmms/model_1_global/test_main_gg_yr.rds")
-write_rds(test_main_gg_sst,
- "./glmms/model_1_global/test_main_gg_sst.rds")
-write_rds(test_main_gg_source,
-"./glmms/model_1_global/test_main_gg_source.rds")
-write_rds(test_main_gg_cpi,
-"./glmms/model_1_global/test_main_gg_cpi.rds")
-write_rds(test_main_gg_yfr,
-"./glmms/model_1_global/test_main_gg_yfr.rds")
-write_rds(test_main_gg_s_sst,
-"./glmms/model_1_global/test_main_gg_s_sst.rds")
-```
-
 ####Plot model
 #####coef
 ```{r}
