@@ -1,0 +1,179 @@
+---
+title: "discussion_figure"
+author: "Shahar Chaikin"
+date: "2026-01-24"
+output: html_document
+---
+
+Libraries
+```{r}
+library(tidyverse)
+```
+
+  #Data
+```{r}
+#data for models
+data_models=read_rds("./records data/record_data_for_glmms.rds") %>% 
+  mutate(time_series_id=paste(h3_id,species))
+```
+
+```{r}
+# Prepare the basin-wide annual signal
+# Prepare the basin-wide annual signal
+annual_signal <- data_models %>%
+  filter(first_rec_year >= 1987) %>% 
+  group_by(year_of_records) %>%
+  summarise(
+    basin_median_sst = mean(median_sst, na.rm = TRUE),
+    basin_mean_mhw_ci = mean(annual_c_int, na.rm = TRUE),
+    new_events = sum(records, na.rm = TRUE)
+  ) %>%
+  mutate(cum_colonization = cumsum(new_events))
+
+# --- Dynamic Scaling Factors ---
+max_col <- max(annual_signal$cum_colonization, na.rm = TRUE)
+max_mhw <- max(annual_signal$basin_mean_mhw_ci, na.rm = TRUE)
+
+# Scale factor for MHW bars
+scale_mhw <- max_col / max_mhw 
+
+# Scale factor for SST
+min_sst_basin <- min(annual_signal$basin_median_sst, na.rm = TRUE)
+max_sst_basin <- max(annual_signal$basin_median_sst, na.rm = TRUE)
+scale_sst <- max_col / (max_sst_basin - min_sst_basin) * 0.2 
+
+p_general <- ggplot(annual_signal, aes(x = year_of_records)) +
+  # A. Cumulative Expansion (Green Area)
+  geom_area(aes(y = cum_colonization), fill = "seagreen", alpha = 0.4) +
+  
+  # B. MHW Pulses (Orange Bars)
+  geom_col(aes(y = basin_mean_mhw_ci * scale_mhw), 
+           fill = "orange", alpha = 0.5, width = 0.8) +
+  
+  # C. Labels for MHW Intensity
+  geom_text(aes(y = basin_mean_mhw_ci * scale_mhw, 
+                label = round(basin_mean_mhw_ci, 1)), 
+            vjust = -0.5, size = 3, color = "darkorange4", check_overlap = TRUE) +
+  
+  # D1. Observed Annual SST (The Jagged Line) - ADDED THIS
+  geom_line(aes(y = (basin_median_sst - min_sst_basin) * scale_sst * 5),
+            color = "darkred", alpha = 0.5, size = 0.8) +
+
+  # D2. Chronic Warming Trend (The Smooth Dashed Line)
+  # geom_smooth(aes(y = (basin_median_sst - min_sst_basin) * scale_sst * 5), 
+  #             method = "lm", color = "darkred", size = 1.2, linetype = "dashed", se = FALSE) +
+  
+  # Axes and Labels
+  scale_y_continuous(
+    name = "Cumulative Colonization (Momentum)",
+    sec.axis = sec_axis(~ . / (scale_sst * 5) + min_sst_basin, 
+                        name = "Basin-wide annual SST (°C)")
+  ) +
+  labs(
+    title = "Synthesis: The Chronic Warming 'Conveyor Belt'",
+    x = "Year"
+  ) +
+  theme_bw() +
+  theme(axis.title.y.right = element_text(color = "darkred"),
+        axis.text.y.right = element_text(color = "darkred"))
+p_general
+
+ggsave("./plots/General_Synthesis_Plot.png", plot = p_general, width = 10, height = 6, dpi = 300)
+```
+
+Species level
+```{r}
+# Filter for frequent colonizers (>= 10 hexagons)
+frequent_colonizers <- data_models %>%
+  filter(records == 1,
+         first_rec_year>=1987) %>%
+  group_by(species) %>%
+  filter(sum(records)>=3) %>% 
+  distinct(species) %>% 
+  pull(species)
+
+# Create output directory structure
+dir.create("./plots", showWarnings = FALSE)
+dir.create("./plots/Species_Plots", showWarnings = FALSE)
+
+for (sp in frequent_colonizers) {
+  
+  # 2a. Prepare Species Data
+  sp_data <- data_models %>%
+    filter(species == sp) %>%
+    group_by(year_of_records) %>%
+    summarise(
+      annual_basin_sst = median(median_sst, na.rm = TRUE),
+      annual_mhw_int = mean(annual_c_int, na.rm = TRUE),
+      new_colonizations = sum(records, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    arrange(year_of_records) %>%
+    mutate(cum_colonizations = cumsum(new_colonizations))
+  
+  # 2b. Find Threshold Year (3rd record)
+  threshold_row <- sp_data %>% filter(cum_colonizations >= 3) %>% slice(1)
+  threshold_year <- if(nrow(threshold_row) > 0) threshold_row$year_of_records else max(sp_data$year_of_records)
+  
+  # 2c. Dynamic Scaling
+  max_sp_col <- max(sp_data$cum_colonizations, na.rm = TRUE)
+  max_sp_mhw <- max(sp_data$annual_mhw_int, na.rm = TRUE)
+  scale_sp_mhw <- if(max_sp_mhw > 0) max_sp_col / max_sp_mhw else 1
+  
+  min_sp_sst <- min(sp_data$annual_basin_sst, na.rm = TRUE)
+  max_sp_sst <- max(sp_data$annual_basin_sst, na.rm = TRUE)
+  scale_sp_sst <- max_sp_col / (max_sp_sst - min_sp_sst)
+
+  # 2d. Plot
+  p_sp <- ggplot(sp_data, aes(x = year_of_records)) +
+    
+    # MHW Bars
+    geom_col(aes(y = annual_mhw_int * scale_sp_mhw), 
+             fill = "orange", alpha = 0.3) +
+    
+    # MHW Labels (Added)
+    # Only show labels where intensity > 0
+    geom_text(data = filter(sp_data, annual_mhw_int > 0),
+              aes(y = annual_mhw_int * scale_sp_mhw, 
+                  label = round(annual_mhw_int, 1)), 
+              vjust = -0.5, size = 3, color = "darkorange4", check_overlap = TRUE) +
+    
+    # Post-Establishment Area (Blue - Background)
+    geom_area(aes(y = cum_colonizations), fill = "#3182bd", alpha = 0.6) +
+    
+    # Pre-Establishment Area (Green - Overlay)
+    geom_area(data = subset(sp_data, year_of_records <= threshold_year),
+              aes(y = cum_colonizations), fill = "seagreen", alpha = 0.8) +
+    
+    # Observed SST Line (Solid Red)
+    geom_line(aes(y = (annual_basin_sst - min_sp_sst) * scale_sp_sst), 
+              color = "darkred", 
+              size = 1, 
+              linetype = "solid") +
+    
+    # Axes (Secondary Axis for SST)
+    scale_y_continuous(
+      name = "Cumulative Colonizations",
+      sec.axis = sec_axis(~ . / scale_sp_sst + min_sp_sst, 
+                          name = "Annual SST (°C)")
+    ) +
+    geom_hline(yintercept=3,linetype="dashed",alpha=0.4)+
+    # Labels (Removed Subtitle)
+    labs(
+      title = paste(sp),
+      x = "Year"
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(face = "bold", size = 14),
+      axis.title.y.right = element_text(color = "darkred"), 
+      axis.text.y.right = element_text(color = "darkred")
+    )
+  
+  # 2e. Save
+  filename <- paste0("./plots/Species_Plots/", gsub(" ", "_", sp), ".png")
+  ggsave(filename, plot = p_sp, width = 8, height = 6, bg = "white", dpi = 300)
+  
+  message(paste("Saved:", sp))
+}
+```
