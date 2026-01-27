@@ -49,23 +49,8 @@ test_main=glmer(
     (1|h3_id)+
     (1|species),
   family = "binomial")
-#Colinearity
-##median_s_sst
- #            Term  VIF   VIF 95% CI Increased SE Tolerance Tolerance 95% CI
- #   scale(median_sst) 5.90 [5.77, 6.04]         2.43      0.17     [0.17, 0.17]
- # scale(median_s_sst) 6.03 [5.90, 6.18]         2.46      0.17     [0.16, 0.17]
 
-##max_s_sst - no colinearity!
-
-##min_s_sst - no colinearity!
-
-##mean_s_sst
-# Moderate Correlation
-#               Term  VIF   VIF 95% CI Increased SE Tolerance Tolerance 95% CI
-#  scale(median_sst) 5.36 [5.24, 5.48]         2.32      0.19     [0.18, 0.19]
-#  scale(mean_s_sst) 5.44 [5.32, 5.57]         2.33      0.18     [0.18, 0.19]
-
-write_rds(test_main,"./glmms/model_1_global/test_main.rds")
+#write_rds(test_main,"./glmms/model_1_global/test_main.rds")
 # test_main=read_rds("glmms\\test_main.rds")
 summary(test_main)
 performance::check_singularity(test_main)
@@ -74,7 +59,6 @@ performance::check_overdispersion(test_main)
 performance::check_collinearity(test_main)
 plot(DHARMa::simulateResiduals(test_main))
 MuMIn::r.squaredGLMM(test_main)
-performance::r2_nakagawa(test_main)
 
 #Summarise table for the model
 fixed_effects_df <- broom.mixed::tidy(test_main, effects = "fixed",
@@ -111,14 +95,11 @@ write.csv(fixed_effects_df,"./glmms/model_1_global/fixed_effects_df_binomial.csv
 
 ##1.2) R2 partition
 ```{r}
-####################
-#Variance partition#
-#####################
 #Run Hierarchical Variance Partitioning using glmm.hp
 ## The glmm.hp function calculates the Marginal R2 (R2m) and then decomposes
 ## it into the individual contribution of each fixed effect predictor using
 ## hierarchical partitioning (average shared variance method).
-#model
+#model-prescaled
 test_main_r_part=lme4::glmer(
   data = data_models_pre_scaled,
   formula = records~
@@ -150,9 +131,6 @@ R2_partition_results
 ##I.perc(%)	- The percentage contribution of the predictor to the total Rm. Calculated as:
 #Individual/Rm2 ×100%.
 
-
-############UPDATE
-#Save as csv
 R2_partition_results_df=R2_partition_results[[2]] %>% 
   as_data_frame() %>% 
   rownames_to_column() %>% 
@@ -174,12 +152,8 @@ R2_partition_results_df=R2_partition_results[[2]] %>%
       predictors = "", # Set the predictor name to an empty string (" ")
       across(
         .cols = c(Unique, Average.share, Individual, `I.perc(%)`), # Specify the columns to sum
-        .fns = ~sum(., na.rm = TRUE) # Apply the sum function
-      )
-    )
-  )
+        .fns = ~sum(., na.rm = TRUE))))
   
-#write.csv(R2_partition_results_df,"./glmms/model_1_global/R2_partition_results_df_test_main.csv",row.names = F)
 
 R2_partition_results_df=read.csv("./glmms/model_1_global/R2_partition_results_df_test_main.csv") %>% 
   rename(Variable_p=predictors) %>% 
@@ -191,6 +165,7 @@ R2_partition_results_df=read.csv("./glmms/model_1_global/R2_partition_results_df
     Variable_p%in%"Year"~"Year",
     Variable_p%in%"SST - spatiotemporal"~"SST (annual)",
     Variable_p%in%"SST - spatial"~"SST (climate)"))
+#write.csv(R2_partition_results_df,"./glmms/model_1_global/R2_partition_results_df.csv",row.names = F)
 ```
 
 ####Plot model
@@ -252,18 +227,12 @@ ggsave(filename ="./glmms/model_1_global/coef_p.png" ,plot =coef_p ,device = "jp
 Using dredge
 ```{r}
 # Dredge searches all possible combinations of fixed effects.
-# It automatically keeps the random effects ((1|h3_id) + (1|species)) in ALL models.
-
-# 1.1 Set MuMIn's options to prevent NA's from failing the model
-# This is crucial for dredge()
+# 1.1 Set MuMIn's options to prevent NA's from failing the model, this is crucial for dredge()
 options(na.action = "na.fail")
-
-# It also generates the null model (intercept only) and the global model (all fixed effects).
 cat("\nPerforming Model Dredging (comparing all 64 models)...\n")
 model_selection_table <-MuMIn::dredge(
   test_main,
-  rank = "AICc" # Use AIC corrected for small sample sizes
-)
+  rank = "AICc")
 
 cleaned_table <- as.data.frame(model_selection_table)
 
@@ -280,24 +249,20 @@ cleaned_table <- cleaned_table %>%
                           NA_character_, # Preserve NA as character for the next step
                           format(round(., 3), nsmall = 3))))
 
-# 3. Use data.table::replace_na() (or just base R if preferred, as data.table's main
-# function is replace_na, not just replace) or a similar targeted replacement.
-# Since the request was for data.table::, here is a way using data.table syntax
-# to perform the final step, although using base R's is.na() on the whole data.frame is cleaner here:
+# 3. convert into a clear table
 
 # Convert to data.table temporarily for the final NA replacement step
 data.table::setDT(cleaned_table)
 
 # Use data.table's powerful subsetting and replacement for all columns.
-# We are replacing the character NAs (NA_character_) with "-"
+# Replacing the character NAs (NA_character_) with "-"
 for (j in 1:ncol(cleaned_table)) {
   data.table::set(cleaned_table, 
                   i = which(is.na(cleaned_table[[j]])), 
                   j = j, 
-                  value = "-")
-}
+                  value = "-")}
 
-# Convert back to data.frame if you prefer
+# Convert back to data.frame
 cleaned_table2 <- as.data.frame(cleaned_table) %>% 
   select(-1,-2) %>% 
   rename(`Cumulative intensity`=1,
@@ -312,7 +277,6 @@ cleaned_table2 <- as.data.frame(cleaned_table) %>%
   as_tibble()
 
 #write.csv(cleaned_table2,"cleaned_table.csv",row.names = F)
-
 
 importance_ranking <- MuMIn::sw(model_selection_table)
 importance_ranking
@@ -369,7 +333,7 @@ data_1987 %>%
 data_1987$species %>% n_distinct()
 data_1987$h3_id %>% n_distinct()
 data_1987 %>% nrow()
-##How many dis rec per sp?
+##How many distinct rec per species?
 data_1987 %>% 
   group_by(species) %>% 
   summarise(sum_rec=sum(records)) %>% 
@@ -420,144 +384,9 @@ post_est_data$h3_id %>% n_distinct()
 post_est_data %>% nrow()
 ```
 
-##4.1) Only species with first records after 1987
+##4.1) Pre-establishment
 ```{r}
-all_after_1987=glmmTMB(
-  data = data_1987,
-  formula = records~
-    scale(first_rec_year)+
-    scale(CPI)+
-    scale(sources)+
-    scale(annual_c_int)+
-    scale(year_of_mhws)+
-    scale(median_sst)+
-    scale(long_max_s_sst)+
-    (1|h3_id)+
-    (1|species),
-  family = "binomial",
-  control = glmmTMBControl(optimizer = optim,
-                           optArgs = list(method = "BFGS",
-                                          maxit = 10000)))
-
-summary(all_after_1987)
-performance::check_singularity(all_after_1987)
-performance::check_convergence(all_after_1987)
-performance::check_overdispersion(all_after_1987)
-performance::check_collinearity(all_after_1987)
-plot(DHARMa::simulateResiduals(all_after_1987))
-MuMIn::r.squaredGLMM(all_after_1987)
-
-#Summarise table for the model
-fixed_effects_df_after_1987 <- broom.mixed::tidy(all_after_1987, effects = "fixed",
-                                      conf.level = 0.95,
-                                      conf.int=T) %>%
-  # Select and rename columns to match the request
-  select(
-    Variable = term,
-    Coefficient = estimate,
-    `Std. Error` = std.error,
-    `Z Value` = statistic,
-    `P Value` = p.value,
-    `CI lower` = conf.low,
-    `CI upper`=conf.high
-  ) %>%
-  # Format numeric columns for clean presentation (e.g., 3 decimal places)
-  mutate(
-    Coefficient = round(Coefficient, 3),
-    `Std. Error` = round(`Std. Error`, 3),
-    `Z Value` = round(`Z Value`, 3),
-    `P Value` = format.pval(`P Value`, digits = 3, eps = 0.0001),
-    `CI lower` = round(`CI lower`,3),
-    `CI upper`=round(`CI upper`,3)
-  )
-#random effects
-random_effects_df <- broom.mixed::tidy(all_after_1987, effects = "ran_pars") 
-
-#write.csv(fixed_effects_df_after_1987,"fixed_effects_df_after_1987_binomial.csv",row.names = F)
-```
-
-###4.1.1) R partition
-```{r}
-#Rename for glmm.ho func
-data_1987_scaled=data_1987 %>% 
-  mutate(
-    first_rec_year_sc = scale(first_rec_year)[, 1],
-    CPI_sc = scale(CPI)[, 1],
-    sources_sc = scale(sources)[, 1],
-    annual_c_int_sc = scale(annual_c_int)[, 1],
-    year_of_mhws_sc = scale(year_of_mhws)[, 1],
-    median_sst_sc = scale(median_sst)[, 1],
-    long_max_s_sst_sc=scale(long_max_s_sst)[,1])
-
-#model
-all_after_1987_sc=glmmTMB(
-  data = data_1987_scaled,
-  formula = records~
-    first_rec_year_sc+
-    CPI_sc+
-    sources_sc+
-    annual_c_int_sc+
-    year_of_mhws_sc+
-    median_sst_sc+
-    long_max_s_sst_sc+
-    (1|h3_id)+
-    (1|species),
-  family = "binomial")
-
-R2_partition_results_after_1987 <-glmm.hp(all_after_1987_sc,
-                                #iv =iv,
-                                type="R2") # Specify that I want adjusted R2 partitioning
-
-R2_partition_results_after_1987
-#write_rds(R2_partition_results_after_1987,"R2_partition_results_after_1987_test_main.rds")
-
-#Interpretation
-##Unique - The R2 explained by the predictor alone, i.e., in a model containing only that predictor.
-
-##Average.share - The R2 explained by the predictor jointly with other predictors, calculated as the average improvement in R2 across all possible models where that predictor is added. This is the primary metric for individual predictor importance.
-
-##Individual - The total contribution of the predictor to the model Rm. This is the sum of its Unique contribution and its Average.share contribution: Unique+Average.share.
-
-##I.perc(%)	- The percentage contribution of the predictor to the total Rm. Calculated as:
-#Individual/Rm2 ×100%.
-
-
-############UPDATE
-#Save as csv
-R2_partition_results_after_1987_df=R2_partition_results_after_1987[[2]] %>% 
-  as_data_frame() %>% 
-  rownames_to_column() %>% 
-  rename(predictors=1,
-         Unique =2,
-         Average.share=3,
-         Individual=4,
-         `I.perc(%)`=5) %>% 
-  mutate(predictors=case_when(predictors%in%"1"~"Year of first record",
-                              predictors%in%"2"~"CPI",
-                              predictors%in%"3"~"Sources",
-                              predictors%in%"4"~"Cumulative intensity",
-                              predictors%in%"5"~"Year",
-                              predictors%in%"6"~"SST - spatiotemporal",
-                              predictors%in%"7"~"SST - spatial")) %>% 
-  # 👇 ADD THIS PART TO SUM DOWN THE COLUMNS AND ADD A NEW ROW
-  bind_rows(
-    summarise(., 
-      predictors = "", # Set the predictor name to an empty string (" ")
-      across(
-        .cols = c(Unique, Average.share, Individual, `I.perc(%)`), # Specify the columns to sum
-        .fns = ~sum(., na.rm = TRUE) # Apply the sum function
-      )
-    )
-  )
-  
-#write.csv(R2_partition_results_after_1987_df,"R2_partition_results_after_1987_df_test_main.csv",row.names = F)
-
-R2_partition_results_after_1987_df=read.csv("glmms/after_1987_all_together/R2_partition_results_after_1987_df_test_main.csv")
-```
-
-##4.2) Pre-establishment
-```{r}
-pre_est_test=glmmTMB(
+pre_est_test=glmer(
   data = pre_est_data,
   formula = records~
     scale(first_rec_year)+
@@ -569,9 +398,10 @@ pre_est_test=glmmTMB(
     scale(long_max_s_sst)+
     (1|h3_id)+
     (1|species),
-  family = "binomial")
+  family = "binomial",
+   control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 #save model
-saveRDS(pre_est_test,"./glmms/post_establishment/pre_est_test.rds")
+#saveRDS(pre_est_test,"./glmms/model_2_pre_intro/pre_est_test.rds")
 
 summary(pre_est_test)
 performance::check_singularity(pre_est_test)
@@ -579,7 +409,6 @@ performance::check_convergence(pre_est_test)
 performance::check_overdispersion(pre_est_test)
 performance::check_collinearity(pre_est_test)
 plot(DHARMa::simulateResiduals(pre_est_test))
-MuMIn::r.squaredGLMM(pre_est_test)
 performance::r2_nakagawa(pre_est_test)
 #Summarise table for the model
 fixed_effects_df_pre_est_test <- broom.mixed::tidy(pre_est_test, effects = "fixed",
@@ -607,10 +436,10 @@ fixed_effects_df_pre_est_test <- broom.mixed::tidy(pre_est_test, effects = "fixe
 #random effects
 pre_est_test_random_effects_df <- broom.mixed::tidy(pre_est_test, effects = "ran_pars") 
 
-#write.csv(fixed_effects_df_pre_est_test,"fixed_effects_df_pre_est_test.csv",row.names = F)
+# write.csv(fixed_effects_df_pre_est_test,"./glmms/model_2_pre_intro/fixed_effects_df_pre_est_test.csv",row.names = F)
 ```
 
-###4.2.1) R partition
+###4.1.1) R partition
 ```{r}
 #Rename for glmm.ho func
 pre_est_data_scaled=pre_est_data %>% 
@@ -623,20 +452,6 @@ pre_est_data_scaled=pre_est_data %>%
     median_sst_sc = scale(median_sst)[, 1],
     long_max_s_sst_sc=scale(long_max_s_sst)[,1])
 
-#model
-pre_est_sc=glmmTMB(
-  data = pre_est_data_scaled,
-  formula = records~
-    first_rec_year_sc+
-    CPI_sc+
-    sources_sc+
-    annual_c_int_sc+
-    year_of_mhws_sc+
-    median_sst_sc+
-    long_max_s_sst_sc+
-    (1|h3_id)+
-    (1|species),
-  family = "binomial")
 
 #using lme4
 pre_est_sc_lme=lme4::glmer(
@@ -656,12 +471,12 @@ pre_est_sc_lme=lme4::glmer(
     optimizer = "bobyqa", # A good default for glmer, but "Nelder_Mead" is default
     optCtrl = list(maxfun = 10000)))
 MuMIn::r.squaredGLMM(pre_est_sc_lme)
+
 R2_partition_results_pre_est_sc <-glmm.hp(pre_est_sc_lme,
                                 #iv =iv,
                                 type="R2") # Specify that I want adjusted R2 partitioning
 
 R2_partition_results_pre_est_sc
-#write_rds(R2_partition_results_pre_est_sc,"R2_partition_results_pre_est_sc.rds")
 
 #Interpretation
 ##Unique - The R2 explained by the predictor alone, i.e., in a model containing only that predictor.
@@ -698,22 +513,10 @@ R2_partition_results_pre_est_sc_df=R2_partition_results_pre_est_sc[[2]] %>%
       across(
         .cols = c(Unique, Average.share, Individual, `I.perc(%)`), # Specify the columns to sum
         .fns = ~sum(., na.rm = TRUE) # Apply the sum function
-      )
-    )
-  )
-  
-#write.csv(R2_partition_results_pre_est_sc_df,"R2_partition_results_pre_est_sc_df.csv",row.names = F)
-R2_partition_results_pre_est_sc_df=read.csv(
-  "glmms/pre_establishment/R2_partition_results_pre_est_sc_df.csv") %>% 
-  rename(Variable_p=predictors) %>% 
-  mutate(Variable_p=case_when(
-    Variable_p%in%"Year of first record"~"Year of first record",
-    Variable_p%in%"CPI"~"CPI",
-    Variable_p%in%"Sources"~"Effort",
-    Variable_p%in%"Cumulative intensity"~"MHWs",
-    Variable_p%in%"Year"~"Year",
-    Variable_p%in%"SST - spatiotemporal"~"SST (annual)",
-    Variable_p%in%"SST - spatial"~"SST (climate)"))
+      )))
+write.csv(R2_partition_results_pre_est_sc_df,
+          "./glmms/model_2_pre_intro/R2_partition_results_pre_est_sc_df.csv",
+          row.names = F)
 ```
 
 ###4.2.2) extract predicted
@@ -770,9 +573,9 @@ all_predictions_combined_pre <- prediction_terms_df %>%
 #write.csv(all_predictions_combined_pre,"all_predictions_combined_pre.csv",row.names = F)
 ```
 
-##4.3) Post-establishment
+##4.2) Post-establishment
 ```{r}
-post_est_test=glmmTMB(
+post_est_test=glmer(
   data = post_est_data,
   formula = records~
     scale(first_rec_year)+
@@ -786,6 +589,8 @@ post_est_test=glmmTMB(
     (1|species),
   family = "binomial")
 
+#saveRDS(post_est_test,"./glmms/model_3_post_into/post_est_test.rds")
+
 summary(post_est_test)
 performance::check_singularity(post_est_test)
 performance::check_convergence(post_est_test)
@@ -793,7 +598,6 @@ performance::check_overdispersion(post_est_test)
 performance::check_collinearity(post_est_test)
 plot(DHARMa::simulateResiduals(post_est_test))
 MuMIn::r.squaredGLMM(post_est_test)
-performance::r2_nakagawa(post_est_test)
 
 #Summarise table for the model
 fixed_effects_df_post_est_test <- broom.mixed::tidy(post_est_test, effects = "fixed",
@@ -821,7 +625,7 @@ fixed_effects_df_post_est_test <- broom.mixed::tidy(post_est_test, effects = "fi
 #random effects
 post_est_test_random_effects_df <- broom.mixed::tidy(post_est_test, effects = "ran_pars") 
 
-#write.csv(fixed_effects_df_post_est_test,"fixed_effects_df_post_est_test.csv",row.names = F)
+write.csv(fixed_effects_df_post_est_test,"./glmms/model_3_post_into/fixed_effects_df_post_est_test.csv",row.names = F)
 ```
 
 ###4.3.1) R partition
@@ -838,7 +642,7 @@ post_est_data_scaled=post_est_data %>%
     long_max_s_sst_sc=scale(long_max_s_sst)[,1])
 
 #model
-post_est_sc=glmmTMB(
+post_est_sc=glmer(
   data = post_est_data_scaled,
   formula = records~
     first_rec_year_sc+
@@ -856,21 +660,6 @@ R2_partition_results_post_est_sc <-glmm.hp(post_est_sc,
                                 #iv =iv,
                                 type="R2") # Specify that I want adjusted R2 partitioning
 
-R2_partition_results_post_est_sc
-#write_rds(R2_partition_results_post_est_sc,"R2_partition_results_post_est_sc.rds")
-
-#Interpretation
-##Unique - The R2 explained by the predictor alone, i.e., in a model containing only that predictor.
-
-##Average.share - The R2 explained by the predictor jointly with other predictors, calculated as the average improvement in R2 across all possible models where that predictor is added. This is the primary metric for individual predictor importance.
-
-##Individual - The total contribution of the predictor to the model Rm. This is the sum of its Unique contribution and its Average.share contribution: Unique+Average.share.
-
-##I.perc(%)	- The percentage contribution of the predictor to the total Rm. Calculated as:
-#Individual/Rm2 ×100%.
-
-
-############UPDATE
 #Save as csv
 R2_partition_results_post_est_sc_df=R2_partition_results_post_est_sc[[2]] %>% 
   as_data_frame() %>% 
@@ -882,11 +671,11 @@ R2_partition_results_post_est_sc_df=R2_partition_results_post_est_sc[[2]] %>%
          `I.perc(%)`=5) %>% 
   mutate(predictors=case_when(predictors%in%"1"~"Year of first record",
                               predictors%in%"2"~"CPI",
-                              predictors%in%"3"~"Sources",
-                              predictors%in%"4"~"Cumulative intensity",
+                              predictors%in%"3"~"Effort",
+                              predictors%in%"4"~"MHWs",
                               predictors%in%"5"~"Year",
-                              predictors%in%"6"~"SST - spatiotemporal",
-                              predictors%in%"7"~"SST - spatial")) %>% 
+                              predictors%in%"6"~"SST (annual)",
+                              predictors%in%"7"~"SST (climate)")) %>% 
   # 👇 ADD THIS PART TO SUM DOWN THE COLUMNS AND ADD A NEW ROW
   bind_rows(
     summarise(., 
@@ -898,76 +687,10 @@ R2_partition_results_post_est_sc_df=R2_partition_results_post_est_sc[[2]] %>%
     )
   )
   
-#write.csv(R2_partition_results_post_est_sc_df,"R2_partition_results_post_est_sc_df.csv",row.names = F)
-R2_partition_results_post_est_sc_df=read.csv(
-  "glmms/post_establishment/R2_partition_results_post_est_sc_df.csv") %>% 
-  rename(Variable_p=predictors) %>% 
-  mutate(Variable_p=case_when(
-    Variable_p%in%"Year of first record"~"Year of first record",
-    Variable_p%in%"CPI"~"CPI",
-    Variable_p%in%"Sources"~"Effort",
-    Variable_p%in%"Cumulative intensity"~"MHWs",
-    Variable_p%in%"Year"~"Year",
-    Variable_p%in%"SST - spatiotemporal"~"SST (annual)",
-    Variable_p%in%"SST - spatial"~"SST (climate)"))
+write.csv(R2_partition_results_post_est_sc_df,"./glmms/model_3_post_into/R2_partition_results_post_est_sc_df.csv",row.names = F)
 ```
 
-###4.3.2) extract predicted
-```{r}
-# List the predictors you want to marginalize over (from your model formula)
-predictors <- c(
-  "annual_c_int",
-  "year_of_mhws",
-  "median_sst",
-  "long_max_s_sst",
-  "sources",
-  "CPI",
-  "first_rec_year")
-
-# Define the step size (by) for each predictor's range.
-step_sizes <- list(
-  annual_c_int = 1,
-  year_of_mhws = 1,
-  median_sst   = 0.5,
-  long_max_s_sst = 0.5,
-  sources      = 0.1,
-  CPI          = 0.001,
-  first_rec_year = 1)
-
-# --- 2. Create the Data Frame of Prediction Terms ---
-
-# Dynamically calculate the min/max range for each predictor from the original pre_est_test
-prediction_terms_df_post <- post_est_data %>%
-  select(all_of(predictors)) %>%
-  # Summarize the min and max for each column
-  summarise(across(everything(), list(min = min, max = max))) %>%
-  # Pivot to long format using names_pattern to capture the full predictor name
-  pivot_longer(
-    cols = everything(),
-    names_to = c("predictor", ".value"),
-    # The regex (.*) captures EVERYTHING up to the LAST underscore, and (min|max) captures the suffix.
-    names_pattern = "(.*)_(min|max)"
-  ) %>%
-  # Add the 'by' step size. 'predictor' now contains the full name (e.g., 'annual_c_int'),
-  # which correctly matches the names in the step_sizes list.
-  mutate(by = unlist(step_sizes[predictor])) %>%
-  # Construct the full 'terms' string for ggpredict()
-  mutate(ggpredict_term = paste0(predictor, " [", min, ":", max, " by = ", by, "]"))
-
-# --- 3. Automate Predictions and Combine Data Frames ---
-
-all_predictions_combined_post <- prediction_terms_df_post %>%
-  pull(ggpredict_term) %>%
-  map_dfr(~ {
-    pred_data <-ggeffects::ggpredict(post_est_test, terms = .x) %>% as.data.frame()
-    predictor_name <- str_extract(.x, "^[^ ]+") # Extract the predictor name from the term string
-    return(pred_data %>% mutate(predictor_used = predictor_name)) # Renamed to 'predictor_used' for clarity
-  })
-
-#write.csv(all_predictions_combined_post,"all_predictions_combined_post.csv",row.names = F)
-```
-
-##4.4) Plot phases
+##4.3) Plot phases
 ###coefs
 ####Plot pre
 ```{r}
@@ -976,7 +699,7 @@ fixed_effects_df_pre_est_test_vis=fixed_effects_df_pre_est_test %>%
   mutate(Effect=case_when(`CI lower`>0~"Positive",
                           `CI upper`<0~"Negative",
                           TRUE~"Neutral"),
-         Variable_p=case_when(
+         Variable=case_when(
                     Variable%in%"scale(first_rec_year)"~"Year of first record",
                     Variable%in%"scale(CPI)"~"CPI",
                     Variable%in%"scale(sources)"~"Effort",
@@ -984,18 +707,26 @@ fixed_effects_df_pre_est_test_vis=fixed_effects_df_pre_est_test %>%
                     Variable%in%"scale(year_of_mhws)"~"Year",
                     Variable%in%"scale(median_sst)"~"SST (annual)",
                     Variable%in%"scale(long_max_s_sst)"~"SST (climate)")) %>% 
-  left_join(R2_partition_results_pre_est_sc_df,by="Variable_p")
+  left_join(R2_partition_results_pre_est_sc_df %>% 
+              rename(Variable="predictors") %>% 
+              mutate(Variable=case_when(
+                    Variable%in%"Sources"~"Effort",
+                    Variable%in%"Cumulative intensity"~"MHWs",
+                    Variable%in%"SST - spatiotemporal"~"SST (annual)",
+                    Variable%in%"SST - spatial"~"SST (climate)",
+                    TRUE~Variable)),
+            by="Variable")
 
 coef_pre_est_p=ggplot(data=fixed_effects_df_pre_est_test_vis)+
   geom_vline(xintercept = 0,linetype="dashed",color="black")+
   geom_errorbarh(aes(xmin=`CI lower`,
                      xmax=`CI upper`,
-                     y=Variable_p),
+                     y=Variable),
                  width=0.1,
                  color="grey",
                  size=1)+
   geom_point(aes(x=Coefficient,
-                 y=reorder(Variable_p,Coefficient),
+                 y=reorder(Variable,Coefficient),
                  fill=Effect),
              shape=21,
              size=3.5)+
@@ -1005,8 +736,8 @@ coef_pre_est_p=ggplot(data=fixed_effects_df_pre_est_test_vis)+
   geom_text(data=fixed_effects_df_pre_est_test_vis %>% 
               drop_na(),
             aes(x=Coefficient,
-                y=reorder(Variable_p,`I.perc...`),
-                label=paste(`I.perc...`,"%",sep ="")),
+                y=reorder(Variable,`I.perc(%)`),
+                label=paste(`I.perc(%)`,"%",sep ="")),
             vjust=-1,
             size=3)+
   theme_bw()+
@@ -1021,7 +752,7 @@ coef_pre_est_p=ggplot(data=fixed_effects_df_pre_est_test_vis)+
        caption = bquote(R[m]^2 == 0.68*","~~R[c]^2 == 0.72))+
   coord_cartesian(xlim=c(-3.35,3.35))
 coef_pre_est_p
-ggsave(filename ="./plots/coef_pre_est_p.png" ,plot =coef_pre_est_p ,device = "jpeg",units = "cm",width = 15,height = 12)
+ggsave(filename ="./glmms/model_2_pre_intro//coef_pre_est_p.pdf" ,plot =coef_pre_est_p ,device = "jpeg",units = "cm",width = 15,height = 12)
 ```
 
 ####plot post
@@ -1031,7 +762,7 @@ fixed_effects_df_post_est_test_vis=fixed_effects_df_post_est_test %>%
   mutate(Effect=case_when(`CI lower`>0~"Positive",
                           `CI upper`<0~"Negative",
                           TRUE~"Neutral"),
-         Variable_p=case_when(
+         Variable=case_when(
                     Variable%in%"scale(first_rec_year)"~"Year of first record",
                     Variable%in%"scale(CPI)"~"CPI",
                     Variable%in%"scale(sources)"~"Effort",
@@ -1039,18 +770,20 @@ fixed_effects_df_post_est_test_vis=fixed_effects_df_post_est_test %>%
                     Variable%in%"scale(year_of_mhws)"~"Year",
                     Variable%in%"scale(median_sst)"~"SST (annual)",
                     Variable%in%"scale(long_max_s_sst)"~"SST (climate)")) %>% 
-  left_join(R2_partition_results_post_est_sc_df,by="Variable_p")
+  left_join(R2_partition_results_post_est_sc_df %>% 
+              rename(Variable=predictors),
+            by="Variable")
 
 coef_post_est_p=ggplot(data=fixed_effects_df_post_est_test_vis)+
   geom_vline(xintercept = 0,linetype="dashed",color="black")+
   geom_errorbarh(aes(xmin=`CI lower`,
                      xmax=`CI upper`,
-                     y=Variable_p),
+                     y=Variable),
                  width=0.1,
                  color="grey",
                  size=1)+
   geom_point(aes(x=Coefficient,
-                 y=reorder(Variable_p,Coefficient),
+                 y=reorder(Variable,Coefficient),
                  fill=Effect),
              shape=21,
              size=3.5)+
@@ -1059,9 +792,9 @@ coef_post_est_p=ggplot(data=fixed_effects_df_post_est_test_vis)+
                                "Neutral" = "white"))+
   geom_text(data=fixed_effects_df_post_est_test_vis %>% 
               drop_na(),
-            aes(y=reorder(Variable_p,`I.perc...`),
+            aes(y=reorder(Variable,`I.perc(%)`),
                 x=Coefficient,
-                label=paste(`I.perc...`,"%",sep ="")),
+                label=paste(`I.perc(%)`,"%",sep ="")),
                 size=3,
                 vjust=-1)+
   theme_bw()+
@@ -1076,7 +809,7 @@ coef_post_est_p=ggplot(data=fixed_effects_df_post_est_test_vis)+
        caption = bquote(R[m]^2 == 0.75*","~~R[c]^2 == 0.79))+
   coord_cartesian(xlim=c(-3.35,3.35))
 coef_post_est_p
-ggsave(filename ="./plots/coef_post_est_p.png" ,plot =coef_post_est_p ,device = "jpeg",units = "cm",width = 15,height = 12)
+ggsave(filename ="./glmms/model_3_post_into/coef_post_est_p.pdf" ,plot =coef_post_est_p ,device = "jpeg",units = "cm",width = 15,height = 12)
 ```
 
 ####Bind
@@ -1093,197 +826,5 @@ grid_pre_post_coef=gridExtra::grid.arrange(
     c(2)))
 
 
-ggsave(filename ="./plots/grid_pre_post_coef.png" ,plot =grid_pre_post_coef ,device = "jpeg",units = "cm",width = 15,height = 20)
+ggsave(filename ="./plots/grid_pre_post_coef.pdf" ,plot =grid_pre_post_coef ,device = "jpeg",units = "cm",width = 15,height = 20)
 ```
-
-
-###4.4.1) Year
-####pre
-```{r}
-pre_yr_p=ggplot(pre_est_data)+
-  geom_jitter(aes(x=year_of_mhws,y=records),
-             alpha=0.3,
-             color="grey",
-             width = 0.1,
-             height = 0.01)+
-  geom_ribbon(data=all_predictions_combined_pre %>% 
-                filter(predictor_used%in%"year_of_mhws"),
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#56B52F")+
-  geom_line(data=all_predictions_combined_pre %>% 
-                filter(predictor_used%in%"year_of_mhws"),
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="Year",
-       y="Record status",
-       title="A) ")+
-  theme_bw()+
-  theme(axis.title = element_blank())
-pre_yr_p
-```
-
-####post
-```{r}
-post_yr_p=ggplot(post_est_data)+
-  geom_jitter(aes(x=year_of_mhws,y=records),
-             alpha=0.3,
-             color="grey",
-             width = 0.1,
-             height = 0.01)+
-  geom_ribbon(data=all_predictions_combined_post %>% 
-                filter(predictor_used%in%"year_of_mhws"),
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#56B52F")+
-  geom_line(data=all_predictions_combined_post %>% 
-                filter(predictor_used%in%"year_of_mhws"),
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="Year",
-       y="Record status",
-       title="B) ")+
-  theme_bw()+
-  theme(axis.title = element_blank())
-post_yr_p
-```
-
-###4.4.1) SST-spatiotemporal
-####pre
-```{r}
-pre_sst_p=ggplot(pre_est_data)+
-  geom_point(aes(x=median_sst,y=records),
-             alpha=0.3,
-             color="grey")+
-  geom_ribbon(data=all_predictions_combined_pre %>% 
-                filter(predictor_used%in%"median_sst"),
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=all_predictions_combined_pre %>% 
-                filter(predictor_used%in%"median_sst"),
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="SST - spatiotemporal (°C)",
-       y="Record status",
-       title="C) ")+
-  theme_bw()+
-  theme(axis.title = element_blank())
-pre_sst_p
-
-#SST zoom
-pre_sst_p_zoom=ggplot(pre_est_data)+
-  geom_ribbon(data=all_predictions_combined_pre %>% 
-                filter(predictor_used%in%"median_sst"),
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=all_predictions_combined_pre %>% 
-                filter(predictor_used%in%"median_sst"),
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  theme_bw()+
-  coord_cartesian(ylim=c(0,.08))+
-  #scale_y_continuous(breaks = seq(0,0.05,by=0.025))+
-  theme(axis.title = element_blank(),
-        plot.background = element_rect(fill = "transparent", colour = NA))
-
-#embed sst
-embeded_sst_pre <- pre_sst_p +
-  annotation_custom(ggplotGrob(pre_sst_p_zoom),
-                    xmin = 16, xmax = 23,
-                    ymin = 0.1, ymax = 0.9)+
-  theme(axis.title = element_blank())
-embeded_sst_pre
-```
-
-####post
-```{r}
-post_sst_p=ggplot(post_est_data)+
-  geom_point(aes(x=median_sst,y=records),
-             alpha=0.3,
-             color="grey")+
-  geom_ribbon(data=all_predictions_combined_post %>% 
-                filter(predictor_used%in%"median_sst"),
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=all_predictions_combined_post %>% 
-                filter(predictor_used%in%"median_sst"),
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  labs(x="SST - spatiotemporal (°C)",
-       y="Record status",
-       title="D) ")+
-  theme_bw()+
-  theme(axis.title.y = element_blank())
-post_sst_p
-
-#SST zoom
-post_sst_p_zoom=ggplot(post_est_data)+
-  geom_ribbon(data=all_predictions_combined_post %>% 
-                filter(predictor_used%in%"median_sst"),
-              aes(x=x,ymin=conf.low,ymax=conf.high),
-              alpha=0.3,
-              fill="#E61316")+
-  geom_line(data=all_predictions_combined_post %>% 
-                filter(predictor_used%in%"median_sst"),
-              aes(x=x,y=predicted),
-            linewidth=1)+
-  theme_bw()+
-  coord_cartesian(ylim=c(0,.004))+
-  #scale_y_continuous(breaks = seq(0,0.05,by=0.025))+
-  theme(axis.title = element_blank(),
-        plot.background = element_rect(fill = "transparent", colour = NA))
-
-#embed sst
-embeded_sst_pro <- post_sst_p +
-  annotation_custom(ggplotGrob(post_sst_p_zoom),
-                    xmin = 15, xmax = 23,
-                    ymin = 0.1, ymax = 0.9)+
-  theme(axis.title = element_blank())
-embeded_sst_pro
-```
-
-####Bind
-```{r}
-x_title_year <- textGrob("Year", gp = gpar(fontsize = 12))
-x_title_sst <- textGrob("SST-temporal (°C)", gp = gpar(fontsize = 12))
-l_col_title_pre <- textGrob("Pre-establishment", gp = gpar(fontsize = 12))
-r_col_title_pre <- textGrob("Post-establishment", gp = gpar(fontsize = 12))
-
-
-grid_pre_post_yr_sst=gridExtra::grid.arrange(
-  left="Occurrence probability",
-  l_col_title_pre,r_col_title_pre,
-  pre_yr_p,post_yr_p,x_title_year,
-  embeded_sst_pre,embeded_sst_pro,x_title_sst,
-  layout_matrix = rbind(
-    c(1, 2),
-    c(3, 4),
-    c(3, 4),
-    c(3, 4),
-    c(3, 4),
-    c(3, 4),
-    c(3, 4),
-    c(3, 4),
-    c(3, 4),
-    c(3, 4),
-    c(3, 4),# Top plots
-    c(5, 5), # Title for top plots (spanning two columns)
-    c(6, 7),
-    c(6, 7),
-    c(6, 7),
-    c(6, 7),
-    c(6, 7),
-    c(6, 7),
-    c(6, 7),
-    c(6, 7),
-    c(6, 7),
-    c(6, 7),
-    c(8,8)))
-
-
-ggsave(filename ="grid_pre_post_yr_sst.png" ,plot =grid_pre_post_yr_sst ,device = "jpeg",units = "cm",width = 20,height = 15)
-```
-
